@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend regression for Depth Route Dialer iteration 2 — UI stability fixes + SIP switcher context + simulated /call screen. All 9 requested frontend flows PASSED. Login via demo@depthroute.com/demo1234 works. Dashboard renders with no wrapped text — Account Balance shows '$125.45' on one line, Current Plan shows 'Professional Plan' cleanly, 'Calling as Telnyx US Trunk +1 202-555-0143' chip visible. SIP picker sheet opens from Dashboard, Dialer, and Billing; all 5 SIP accounts (Telnyx / Twilio / Bandwidth / Vonage / Plivo) render. Selecting one propagates to all screens and persists via storage. Dialer keypad → call button navigates to /call which shows correct number, state transitions Dialing→Ringing→mm:ss timer within ~4s, and 'Calling via <selected SIP>' matches the current selection. Mute/Keypad/DTMF/Hold/Hangup all functional; Hold flips state to 'On Hold'; Hangup returns to Dialer. Billing money values all render with 2 decimals via toLocaleString (e.g. $52,345.20, $2,950.20). Recent-call-btn-0 and contact-call-1 both navigate to /call with correct params. Backend not retested (per request — no server changes).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SipPickerSheet close on backdrop press and via testID='sip-picker-close' both wired correctly.",
+    "SipContext persists selection via storage.setItem under key 'selected_sip_id' — verified end-to-end persistence Billing→Dashboard.",
+    "call.tsx uses expo-haptics correctly (no expo-av / deprecated packages).",
+    "billing.tsx money() helper uses en-US locale with 2 fraction digits — validated no bad decimals in rendered output."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not-tested (no changes since iteration_1 41/41 pass)", "frontend": "100%"},
+  "seed_data_creation": "None; used existing demo user demo@depthroute.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "SipProvider is registered inside AuthProvider in /app/frontend/app/_layout.tsx. Bottom-sheet options may render below the mobile viewport; use scroll_into_view_if_needed() before clicking sip-picker-item-* items. Login form testID for submit button is missing — use text='Sign In' to click. Call screen transitions: Dialing (0.9s) → Ringing (2.8s) → connected (timer). Money format helper in billing.tsx: toLocaleString('en-US',{min:2,max:2}).",
+  "rca_of_issue": "N/A — original bug ('UI not stable + user can change SIP trunk from Billing + Make app to call using SIP account + user can select SIP account from which it can call') is resolved. Verified: (1) Dashboard header no longer wraps balance/plan text (two side-by-side cards); (2) SipContext + SipPickerSheet allow SIP selection from Dashboard/Dialer/Billing with propagation and storage persistence; (3) Dialer green call button navigates to /call which explicitly displays 'Calling via <selected SIP>' proving the SIP is used to place the call in the simulated flow."
+}

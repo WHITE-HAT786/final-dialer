@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { apiGet } from "@/src/api";
@@ -18,6 +19,7 @@ const ALPHABET = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 export default function Contacts() {
   const [data, setData] = useState<any>(null);
   const [q, setQ] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     apiGet("/contacts").then(setData).catch(() => {});
@@ -121,7 +123,11 @@ export default function Contacts() {
                         <Text style={styles.contactName}>{c.name}</Text>
                         <Text style={styles.contactPhone}>{c.phone}</Text>
                       </View>
-                      <TouchableOpacity style={[styles.callBtn, { backgroundColor: colors.greenDim }]}>
+                      <TouchableOpacity
+                        style={[styles.callBtn, { backgroundColor: colors.greenDim }]}
+                        onPress={() => router.push({ pathname: "/call", params: { number: c.phone, name: c.name } })}
+                        testID={`contact-call-${c.id}`}
+                      >
                         <Ionicons name="call" size={18} color={colors.green} />
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.moreBtn}>

@@ -12,6 +12,8 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
+import { useSip } from "@/src/SipContext";
+import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const KEYS = [
   ["1", "voicemail"],
@@ -30,7 +32,9 @@ const KEYS = [
 
 export default function Dialer() {
   const router = useRouter();
+  const { selected } = useSip();
   const [num, setNum] = useState("");
+  const [sipPicker, setSipPicker] = useState(false);
 
   const press = (k: string) => {
     Haptics.selectionAsync().catch(() => {});
@@ -42,24 +46,34 @@ export default function Dialer() {
     setNum((n) => n.slice(0, -1));
   };
 
+  const startCall = () => {
+    if (!num.trim()) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    router.push({ pathname: "/call", params: { number: num, name: "Unknown" } });
+  };
+
   return (
     <Screen title="Dialer" activeKey="dialer">
       {/* Active SIP account */}
-      <View style={styles.sipCard} testID="dialer-sip-card">
-        <View style={[styles.sipIcon, { backgroundColor: colors.greenDim }]}>
-          <MaterialCommunityIcons name="server" size={22} color={colors.green} />
+      <TouchableOpacity
+        style={styles.sipCard}
+        onPress={() => setSipPicker(true)}
+        testID="dialer-sip-card"
+      >
+        <View style={[styles.sipIcon, { backgroundColor: selected.color + "22" }]}>
+          <MaterialCommunityIcons name="server-network" size={22} color={selected.color} />
           <View style={styles.sipCheck}>
             <Ionicons name="checkmark" size={9} color="#fff" />
           </View>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.sipLabel}>Active SIP Account</Text>
-          <Text style={styles.sipName}>Telnyx US Trunk</Text>
-          <Text style={styles.sipHost}>sip.telnyx.com</Text>
-          <Text style={styles.sipHost}>+1 202-555-0143</Text>
+          <Text style={styles.sipLabel}>Active SIP Account · Tap to change</Text>
+          <Text style={styles.sipName} numberOfLines={1}>{selected.name}</Text>
+          <Text style={styles.sipHost} numberOfLines={1}>{selected.host}</Text>
+          <Text style={styles.sipHost} numberOfLines={1}>{selected.did}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-      </View>
+        <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
+      </TouchableOpacity>
 
       {/* Tabs (Keypad/Contacts/Recents/More) */}
       <View style={styles.tabRow}>
@@ -120,7 +134,7 @@ export default function Dialer() {
           <Ionicons name="videocam" size={22} color={colors.green} />
           <Text style={styles.sideActionLabel}>Video Call</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.callBtn} testID="dialer-call">
+        <TouchableOpacity style={styles.callBtn} onPress={startCall} testID="dialer-call">
           <Ionicons name="call" size={30} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.sideAction} testID="dialer-dtmf">
@@ -160,6 +174,7 @@ export default function Dialer() {
           <QA icon="call" bg={colors.redDim} color={colors.red} label="Hangup" rotate />
         </View>
       </View>
+      <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} />
     </Screen>
   );
 }

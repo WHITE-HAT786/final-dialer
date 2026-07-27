@@ -13,6 +13,8 @@ import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { useAuth } from "@/src/AuthContext";
+import { useSip } from "@/src/SipContext";
+import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const iconFor = (type: string) => {
   if (type === "outgoing") return { name: "call-sharp", rot: -45, color: colors.green, bg: colors.greenDim };
@@ -36,9 +38,11 @@ const statIcon = (icon: string) => {
 export default function Dashboard() {
   const router = useRouter();
   const { user } = useAuth();
+  const { selected } = useSip();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [sipPicker, setSipPicker] = useState(false);
 
   const load = async () => {
     try {
@@ -99,8 +103,8 @@ export default function Dashboard() {
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>{data.profile.name}</Text>
-          <Text style={styles.profileExt}>
+          <Text style={styles.profileName} numberOfLines={1}>{data.profile.name}</Text>
+          <Text style={styles.profileExt} numberOfLines={1}>
             <Text style={{ color: colors.primary }}>{data.profile.ext}</Text>{" "}
             <Text style={{ color: colors.textMuted }}>({data.profile.name})</Text>
           </Text>
@@ -109,37 +113,53 @@ export default function Dashboard() {
             <Text style={styles.sipText}>{data.profile.sip_status}</Text>
           </View>
         </View>
-        <View style={styles.balanceBox}>
-          <TouchableOpacity
-            style={styles.balanceRow}
-            onPress={() => router.push("/billing")}
-            testID="dashboard-balance"
-          >
-            <View style={[styles.miniIcon, { backgroundColor: colors.greenDim }]}>
-              <Ionicons name="wallet" size={16} color={colors.green} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.tinyLabel}>Account Balance</Text>
-              <Text style={styles.balanceValue}>
-                ${data.balance.amount.toFixed(2)}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 10 }} />
-          <TouchableOpacity
-            style={styles.balanceRow}
-            onPress={() => router.push("/plans")}
-            testID="dashboard-plan"
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.tinyLabel}>Plan</Text>
-              <Text style={styles.planName}>{data.plan.name}</Text>
-              <Text style={styles.planDate}>Valid till: {data.plan.valid_till}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
+      </View>
+
+      {/* SIP account switcher */}
+      <TouchableOpacity
+        style={styles.sipChipRow}
+        onPress={() => setSipPicker(true)}
+        testID="dashboard-sip-switcher"
+      >
+        <View style={[styles.sipChipIcon, { backgroundColor: selected.color + "22" }]}>
+          <MaterialCommunityIcons name="server-network" size={18} color={selected.color} />
         </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sipChipLabel}>Calling as</Text>
+          <Text style={styles.sipChipName} numberOfLines={1}>{selected.name}</Text>
+        </View>
+        <Text style={styles.sipChipDid} numberOfLines={1}>{selected.did}</Text>
+        <Ionicons name="swap-horizontal" size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+
+      {/* Balance + Plan side-by-side */}
+      <View style={styles.moneyRow}>
+        <TouchableOpacity
+          style={styles.moneyCard}
+          onPress={() => router.push("/billing")}
+          testID="dashboard-balance"
+        >
+          <View style={[styles.miniIcon, { backgroundColor: colors.greenDim }]}>
+            <Ionicons name="wallet" size={16} color={colors.green} />
+          </View>
+          <Text style={styles.tinyLabel}>Account Balance</Text>
+          <Text style={styles.balanceValue} numberOfLines={1} adjustsFontSizeToFit>
+            ${data.balance.amount.toFixed(2)}
+          </Text>
+          <Text style={styles.moneySub}>Tap to recharge</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.moneyCard}
+          onPress={() => router.push("/plans")}
+          testID="dashboard-plan"
+        >
+          <View style={[styles.miniIcon, { backgroundColor: colors.purpleDim }]}>
+            <Ionicons name="ribbon" size={16} color={colors.purple} />
+          </View>
+          <Text style={styles.tinyLabel}>Current Plan</Text>
+          <Text style={styles.planName} numberOfLines={1}>{data.plan.name}</Text>
+          <Text style={styles.moneySub}>Valid till {data.plan.valid_till}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Stats row */}
@@ -270,8 +290,12 @@ export default function Dashboard() {
                 <Text style={styles.callTime}>{c.time}</Text>
                 <Text style={[styles.callDur, { color: durColor }]}>{c.duration}</Text>
               </View>
-              <TouchableOpacity style={styles.infoBtn}>
-                <Ionicons name="information-circle-outline" size={22} color={colors.primary} />
+              <TouchableOpacity
+                style={styles.infoBtn}
+                onPress={() => router.push({ pathname: "/call", params: { number: c.ext || c.name, name: c.name } })}
+                testID={`recent-call-btn-${i}`}
+              >
+                <Ionicons name="call" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
           );
@@ -295,6 +319,7 @@ export default function Dashboard() {
           </View>
         ))}
       </View>
+      <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} />
     </Screen>
   );
 }
@@ -325,11 +350,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brandInlineText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  profileRow: { flexDirection: "row", gap: 12, marginTop: 8 },
+  profileRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8 },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.primaryDim,
     alignItems: "center",
     justifyContent: "center",
@@ -340,26 +365,49 @@ const styles = StyleSheet.create({
   sipRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   sipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.green },
   sipText: { color: colors.green, fontSize: 12, fontWeight: "600" },
-  balanceBox: {
-    flex: 1.1,
+  sipChipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
     backgroundColor: colors.card,
     borderRadius: 14,
-    padding: 12,
+    marginTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  balanceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  sipChipIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sipChipLabel: { color: colors.textMuted, fontSize: 11 },
+  sipChipName: { color: "#fff", fontSize: 14, fontWeight: "700", marginTop: 2 },
+  sipChipDid: { color: colors.primary, fontSize: 12, fontWeight: "600", maxWidth: 120 },
+  moneyRow: { flexDirection: "row", gap: 10, marginTop: spacing.md },
+  moneyCard: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
   miniIcon: {
     width: 34,
     height: 34,
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 4,
   },
   tinyLabel: { color: colors.textMuted, fontSize: 11 },
-  balanceValue: { color: colors.green, fontSize: 18, fontWeight: "700" },
-  planName: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  planDate: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  balanceValue: { color: colors.green, fontSize: 22, fontWeight: "700" },
+  planName: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  moneySub: { color: colors.textDim, fontSize: 11 },
   statCard: {
     width: 130,
     padding: 12,

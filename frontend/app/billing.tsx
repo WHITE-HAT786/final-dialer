@@ -5,6 +5,8 @@ import Screen from "@/src/components/Screen";
 import { colors } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { StatusPill } from "@/src/components/ListUI";
+import { useSip } from "@/src/SipContext";
+import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const TABS = [
   { key: "invoices", label: "Invoices", icon: "document-text" },
@@ -14,9 +16,15 @@ const TABS = [
   { key: "reports", label: "Reports", icon: "bar-chart" },
 ];
 
+function money(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function Billing() {
   const [data, setData] = useState<any>(null);
   const [active, setActive] = useState("invoices");
+  const [sipPicker, setSipPicker] = useState(false);
+  const { selected } = useSip();
   useEffect(() => { apiGet("/billing").then(setData); }, []);
 
   return (
@@ -25,13 +33,33 @@ export default function Billing() {
     >
       {!data ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
         <>
+          {/* SIP Trunk selector */}
+          <TouchableOpacity
+            style={styles.trunkCard}
+            onPress={() => setSipPicker(true)}
+            testID="billing-trunk-switcher"
+          >
+            <View style={[styles.trunkIcon, { backgroundColor: selected.color + "22" }]}>
+              <MaterialCommunityIcons name="server-network" size={20} color={selected.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.trunkLabel}>SIP Trunk</Text>
+              <Text style={styles.trunkName} numberOfLines={1}>{selected.name}</Text>
+              <Text style={styles.trunkMeta} numberOfLines={1}>{selected.host} · {selected.did}</Text>
+            </View>
+            <View style={styles.changeBtn}>
+              <Ionicons name="swap-horizontal" size={14} color={colors.primary} />
+              <Text style={styles.changeBtnText}>Change</Text>
+            </View>
+          </TouchableOpacity>
+
           <View style={styles.statsRow}>
-            <StatCard color={colors.primary} icon="wallet" label="Total Balance" value={`$${data.stats.total_balance.toLocaleString()}`} sub="This Month" change={data.stats.total_change} positive />
-            <StatCard color={colors.green} icon="card" label="Paid Amount" value={`$${data.stats.paid.toLocaleString()}`} sub="This Month" change={data.stats.paid_change} positive />
+            <StatCard color={colors.primary} icon="wallet" label="Total Balance" value={`$${money(data.stats.total_balance)}`} sub="This Month" change={data.stats.total_change} positive />
+            <StatCard color={colors.green} icon="card" label="Paid Amount" value={`$${money(data.stats.paid)}`} sub="This Month" change={data.stats.paid_change} positive />
           </View>
           <View style={styles.statsRow}>
-            <StatCard color={colors.yellow} icon="document-text" label="Unpaid Amount" value={`$${data.stats.unpaid.toLocaleString()}`} sub="This Month" change={data.stats.unpaid_change} positive />
-            <StatCard color={colors.red} icon="alert-circle" label="Overdue Amount" value={`$${data.stats.overdue.toLocaleString()}`} sub="This Month" change={data.stats.overdue_change} positive={false} />
+            <StatCard color={colors.yellow} icon="document-text" label="Unpaid Amount" value={`$${money(data.stats.unpaid)}`} sub="This Month" change={data.stats.unpaid_change} positive />
+            <StatCard color={colors.red} icon="alert-circle" label="Overdue Amount" value={`$${money(data.stats.overdue)}`} sub="This Month" change={data.stats.overdue_change} positive={false} />
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 14 }}>
@@ -63,21 +91,18 @@ export default function Billing() {
             {data.invoices.map((inv: any, i: number) => (
               <View key={inv.id} style={[styles.invRow, i !== data.invoices.length - 1 && styles.divider]}>
                 <View style={[styles.invIcon, { backgroundColor: inv.status === "Paid" ? colors.primaryDim : inv.status === "Unpaid" ? colors.yellowDim : colors.redDim }]}>
-                  <Ionicons name="document-text" size={18} color={inv.status === "Paid" ? colors.primary : inv.status === "Unpaid" ? colors.yellow : colors.red} />
+                  <Ionicons name="document-text" size={16} color={inv.status === "Paid" ? colors.primary : inv.status === "Unpaid" ? colors.yellow : colors.red} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "700" }}>{inv.id}</Text>
-                  <Text style={styles.client}>{inv.client}</Text>
+                  <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }} numberOfLines={1}>{inv.id}</Text>
+                  <Text style={styles.client} numberOfLines={1}>{inv.client}</Text>
+                  <Text style={styles.date} numberOfLines={1}>{inv.date} · Due {inv.due}</Text>
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.date}>{inv.date}</Text>
-                  <Text style={styles.date}>Due: {inv.due}</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>${inv.amount.toFixed(2)}</Text>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>${money(inv.amount)}</Text>
                   <StatusPill status={inv.status} />
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
               </View>
             ))}
             <TouchableOpacity style={styles.viewAll}>
@@ -139,6 +164,7 @@ export default function Billing() {
               </View>
             </View>
           </View>
+          <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} title="Select SIP Trunk" />
         </>
       )}
     </Screen>
@@ -173,6 +199,13 @@ function LegendRow({ color, label, value }: any) {
 
 const styles = StyleSheet.create({
   iconBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  trunkCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: colors.card, borderRadius: 14, marginTop: 8, borderWidth: 1, borderColor: colors.border },
+  trunkIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  trunkLabel: { color: colors.textMuted, fontSize: 11 },
+  trunkName: { color: "#fff", fontSize: 14, fontWeight: "700", marginTop: 2 },
+  trunkMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  changeBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.primary },
+  changeBtnText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
   statsRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   statCard: { flex: 1, padding: 12, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   icon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
@@ -190,7 +223,7 @@ const styles = StyleSheet.create({
   cardTitle: { color: "#fff", fontWeight: "700", fontSize: 15 },
   invRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   divider: { borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
-  invIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  invIcon: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   client: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   date: { color: colors.textMuted, fontSize: 11 },
   viewAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, padding: 12, backgroundColor: colors.primaryDim + "40", borderRadius: 10 },
