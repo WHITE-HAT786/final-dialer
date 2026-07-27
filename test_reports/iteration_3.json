@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend regression for iteration 3 — SIP integration via JsSIP. ALL requested SIP flows pass on web preview. Login (demo@depthroute.com/demo1234) succeeds and lands on /dashboard. The Dashboard-below-profile SIP status (testID='dashboard-sip-settings' cog next to it) correctly reflects the real SipEngine status (observed 'SIP Disconnected'). Cog navigates to /settings. /settings renders every requested testID: sip-status-card, sip-display-name, sip-username, sip-password, sip-domain, sip-wss, sip-load-demo, sip-save, sip-logs-card, sip-clear. 'Load Demo Creds' populates the form exactly as spec'd (bman1 / sip.depthroute.com / wss://sip.depthroute.com:8089/ws / Depth Route). 'Save & Connect' fires the engine — SIP Log within 12s shows 4× 'Connecting to wss://sip.depthroute.com:8089/ws' entries plus 4× 'WebSocket disconnected' (code 1006, ERR_CONNECTION_REFUSED) — this is EXPECTED per problem statement (server WSS port closed). The UI remains fully responsive; no crashes, no red-screen. 'Clear stored credentials' removes the config, resets status to Disconnected, and hides itself. Dialer keypad + call button navigates to /call?number=... The /call screen displays every testID (call-name/number/state/via-card/btn-mute/btn-keypad/btn-hold/hangup) and correctly falls back to simulation state machine (state reaches 00:04 timer). Via card text is 'SIP not registered — using simulation' with the mock switcher's caller-id (Telnyx US Trunk +1 202-555-0143) shown as the caller-id, independent of real SIP. DTMF keypad opens and typing digits (1, 2) fills the display. Hangup returns to Dialer. Backend spot-checked: POST /api/auth/login → 200 with valid JWT and user payload. Deprecated packages: none detected in files under review. One MINOR UI-truth bug found: Header.tsx (testID='header-sip-pill') and Sidebar.tsx hardcode 'SIP Registered' as static text; they do NOT read engine.status, so the top-right dashboard pill shows 'SIP Registered' (green) even though the real engine is 'disconnected'. The spec-required dashboard-level status (row below profile) IS real, but the older hardcoded pill in the header should be wired to the real engine or removed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Header.tsx", "issue": "Top-right SIP pill (testID='header-sip-pill') hardcodes label 'SIP Registered' and green dot regardless of engine.status. On dashboard the pill reads 'SIP Registered' while the real engine is 'disconnected' (visible in the below-profile row). Reference: /app/frontend/src/components/Header.tsx:69-74", "testID": "header-sip-pill", "priority": "MEDIUM"},
+      {"component": "Sidebar.tsx", "issue": "Same hardcoded 'SIP Registered' string. Reference: /app/frontend/src/components/Sidebar.tsx:155", "testID": "", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_3.json"],
+  "action_items": [
+    "Header.tsx: replace hardcoded 'SIP Registered' pill with useSipEngine().status → same label mapping used in dashboard.tsx (registered/connecting/disconnected/etc.), so the truth surfaces everywhere and the two dashboard pills agree.",
+    "Sidebar.tsx: same fix — read engine.status for the inline SIP row instead of a static string.",
+    "(Optional) Suppress the fast/infinite reconnect loop while the server is unreachable — the engine currently retries every ~2s (see console log 4 reconnect attempts in 12s). Consider adding jssip's ws_recovery_min/max_interval or a bounded backoff so users don't see 200+ log lines on a long-running failed connection."
+  ],
+  "critical_code_review_comments": [
+    "SipEngine.ts correctly guards WebRTC availability (isWebRtcAvailable) and stays in 'unsupported' on Expo Go without crashing.",
+    "SipEngineContext auto-connects on config change but the useEffect cleanup does not stop the engine — that's fine because the engine is a singleton and outlives providers, but be aware of duplicate .connect() calls during Fast Refresh.",
+    "call.tsx: simulation fallback correctly checks engine.status === 'registered' before attempting real INVITE; otherwise runs the 900ms→2800ms simulator. Verified timer reaches 00:04+ on web.",
+    "settings.tsx: onSave calls requestMicOnWeb() before saveConfig — good, this pre-warms the getUserMedia permission on the web preview so audio can flow when a real WSS is later reachable.",
+    "Header.tsx/Sidebar.tsx hardcode 'SIP Registered' — see ui_bugs above."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "spot-checked (login 200 OK)", "frontend": "100% of requested flows; 1 minor UI-truth mismatch in header pill"},
+  "seed_data_creation": "None — used seeded demo@depthroute.com/demo1234 and the pre-filled SIP creds bman1/@a0000OOO on sip.depthroute.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "SIP web-side integration works — 'Connecting to wss://sip.depthroute.com:8089/ws' and 'WebSocket disconnected' (1006) log entries appear within seconds of tapping Save & Connect. Server WSS port is closed as noted in the problem statement, so status will never reach 'registered' from this environment; that is EXPECTED, not a bug. On /call the mock SIP switcher (Telnyx/Twilio/etc.) is only a caller-id chooser and remains independent of the real engine — confirmed via the 'SIP not registered — using simulation' via-card copy. Two hardcoded 'SIP Registered' strings remain in Header.tsx and Sidebar.tsx (see action_items).",
+  "rca_of_issue": "N/A — feature implemented and behaves per spec. The 'SIP Registered' text visible in the top-right pill is a stale hardcoded label in Header.tsx line 72 (testID='header-sip-pill'), not a functional bug in the SIP engine."
+}

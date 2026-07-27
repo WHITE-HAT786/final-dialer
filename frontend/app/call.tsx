@@ -1,13 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useSip } from "@/src/SipContext";
+import { useSipEngine } from "@/src/sip/SipEngineContext";
 import { colors } from "@/src/theme";
-
-type CallState = "dialing" | "ringing" | "connected" | "ended";
 
 function fmt(sec: number) {
   const m = Math.floor(sec / 60).toString().padStart(2, "0");
@@ -16,20 +15,22 @@ function fmt(sec: number) {
 }
 
 export default function CallScreen() {
-  const params = useLocalSearchParams<{ number?: string; name?: string }>();
+  const params = useLocalSearchParams<{ number?: string; name?: string; callId?: string }>();
   const router = useRouter();
   const { selected } = useSip();
+  const engine = useSipEngine();
 
-  const [state, setState] = useState<CallState>("dialing");
-  const [seconds, setSeconds] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [held, setHeld] = useState(false);
-  const [speaker, setSpeaker] = useState(false);
+  const [callId, setCallId] = useState<string | null>(params.callId || null);
   const [keypadOpen, setKeypadOpen] = useState(false);
   const [dtmf, setDtmf] = useState("");
+  // For simulation fallback when engine isn't registered
+  const [simSeconds, setSimSeconds] = useState(0);
+  const [simState, setSimState] = useState<"dialing" | "ringing" | "connected" | "ended">("dialing");
 
   const pulse = useRef(new Animated.Value(1)).current;
+  const dialingRef = useRef(false);
 
+  // Start pulse animation once
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -39,41 +40,104 @@ export default function CallScreen() {
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [pulse]);
 
+  // If no callId was passed, place a call via the engine (or fall through to simulation).
   useEffect(() => {
-    const t1 = setTimeout(() => setState("ringing"), 900);
-    const t2 = setTimeout(() => setState("connected"), 2800);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
+    (async () => {
+      if (callId || dialingRef.current) return;
+      const number = params.number || "";
+      dialingRef.current = true;
+      if (engine.status === "registered" && number) {
+        const id = await engine.call(number);
+        if (id) setCallId(id);
+      } else {
+        // Simulation fallback
+        const t1 = setTimeout(() => setSimState("ringing"), 900);
+        const t2 = setTimeout(() => setSimState("connected"), 2800);
+        return () => { clearTimeout(t1); clearTimeout(t2); };
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine.status]);
 
+  // Simulation timer
   useEffect(() => {
-    if (state !== "connected" || held) return;
-    const iv = setInterval(() => setSeconds((s) => s + 1), 1000);
+    if (callId) return; // real engine handles duration
+    if (simState !== "connected") return;
+    const iv = setInterval(() => setSimSeconds((s) => s + 1), 1000);
     return () => clearInterval(iv);
-  }, [state, held]);
+  }, [simState, callId]);
+
+  // Pull live call from engine
+  const liveCall = useMemo(() => engine.calls.find((c) => c.id === callId) || null, [engine.calls, callId]);
+
+  // Derived display state
+  const isReal = !!liveCall;
+  const state = isReal ? liveCall!.state : simState;
+  const durationSec = isReal ? liveCall!.durationSec : simSeconds;
+  const muted = isReal ? liveCall!.muted : false;
+  const held = isReal ? liveCall!.onHold : false;
+
+  const number = params.number || (liveCall?.remote || "").replace(/^sip:/, "").split("@")[0] || "Unknown";
+  const name = params.name || liveCall?.remoteName || "Unknown";
+  const initials = ((name && name !== "Unknown" ? name : number) || "?")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "?";
+
+  const stateLabel =
+    state === "dialing" ? "Dialing…" :
+    state === "ringing" ? "Ringing…" :
+    state === "connecting" ? "Connecting…" :
+    state === "connected" ? (held ? "On Hold" : fmt(durationSec)) :
+    state === "held" ? "On Hold" :
+    state === "ended" ? "Call Ended" :
+    state === "failed" ? `Failed${liveCall?.cause ? ` (${liveCall.cause})` : ""}` :
+    "Idle";
+
+  // Auto-return when ended
+  useEffect(() => {
+    if (["ended", "failed"].includes(state)) {
+      const t = setTimeout(() => router.back(), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [state, router]);
 
   const hangup = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    setState("ended");
-    setTimeout(() => router.back(), 900);
+    if (callId) engine.hangup(callId);
+    else { setSimState("ended"); }
   };
 
-  const number = params.number || "+1 555-000-0000";
-  const name = params.name || "Unknown";
-  const initials = (name || number).split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
+  const toggleMute = () => {
+    if (callId) engine.setMute(callId, !muted);
+  };
+  const toggleHold = () => {
+    if (callId) engine.setHold(callId, !held);
+  };
+  const sendDtmf = (t: string) => {
+    Haptics.selectionAsync().catch(() => {});
+    setDtmf((d) => (d + t).slice(-16));
+    if (callId) engine.sendDTMF(callId, t);
+  };
 
-  const stateLabel = state === "dialing" ? "Dialing…" : state === "ringing" ? "Ringing…" : state === "connected" ? (held ? "On Hold" : fmt(seconds)) : "Call Ended";
+  // Choose display SIP: real config if available, otherwise the UI-picker's selected mock
+  const viaName = engine.config?.displayName || selected.name;
+  const viaId = engine.config
+    ? `${engine.config.username}@${engine.config.domain}`
+    : selected.did;
+  const viaColor = engine.status === "registered" ? colors.green : selected.color;
 
   return (
     <SafeAreaView style={styles.wrap} edges={["top", "bottom"]}>
       <View style={styles.headerRow}>
         <View style={styles.sipChip}>
-          <View style={[styles.sipDot, { backgroundColor: selected.color }]} />
-          <Text style={styles.sipChipText} numberOfLines={1}>{selected.name}</Text>
+          <View style={[styles.sipDot, { backgroundColor: viaColor }]} />
+          <Text style={styles.sipChipText} numberOfLines={1}>{viaName}</Text>
         </View>
         <TouchableOpacity onPress={() => router.back()} testID="call-minimize">
           <Ionicons name="chevron-down" size={26} color="#fff" />
@@ -85,7 +149,7 @@ export default function CallScreen() {
           <Animated.View
             style={[
               styles.pulseRing,
-              { transform: [{ scale: pulse }], opacity: state === "connected" ? 0 : 0.4 },
+              { transform: [{ scale: pulse }], opacity: state === "connected" || state === "held" ? 0 : 0.4 },
             ]}
           />
           <View style={styles.avatar} testID="call-avatar">
@@ -95,17 +159,21 @@ export default function CallScreen() {
         <Text style={styles.name} testID="call-name">{name}</Text>
         <Text style={styles.number} testID="call-number">{number}</Text>
         <View style={styles.stateRow}>
-          <View style={[styles.stateDot, { backgroundColor: state === "connected" ? colors.green : colors.yellow }]} />
+          <View style={[styles.stateDot, {
+            backgroundColor: state === "connected" ? colors.green : state === "failed" ? colors.red : colors.yellow,
+          }]} />
           <Text style={styles.state} testID="call-state">{stateLabel}</Text>
         </View>
 
         <View style={styles.viaCard} testID="call-via-card">
-          <MaterialCommunityIcons name="server-network" size={18} color={selected.color} />
+          <MaterialCommunityIcons name="server-network" size={18} color={viaColor} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.viaLabel}>Calling via</Text>
-            <Text style={styles.viaName}>{selected.name}</Text>
+            <Text style={styles.viaLabel}>
+              {engine.status === "registered" ? "Calling via SIP" : "SIP not registered — using simulation"}
+            </Text>
+            <Text style={styles.viaName} numberOfLines={1}>{viaName}</Text>
           </View>
-          <Text style={styles.viaDid}>{selected.did}</Text>
+          <Text style={styles.viaDid} numberOfLines={1}>{viaId}</Text>
         </View>
 
         {keypadOpen && (
@@ -113,15 +181,7 @@ export default function CallScreen() {
             <Text style={styles.dtmfDigits}>{dtmf || " "}</Text>
             <View style={styles.dtmfGrid}>
               {["1","2","3","4","5","6","7","8","9","*","0","#"].map((k) => (
-                <TouchableOpacity
-                  key={k}
-                  style={styles.dtmfKey}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setDtmf((d) => (d + k).slice(-16));
-                  }}
-                  testID={`call-dtmf-${k}`}
-                >
+                <TouchableOpacity key={k} style={styles.dtmfKey} onPress={() => sendDtmf(k)} testID={`call-dtmf-${k}`}>
                   <Text style={styles.dtmfText}>{k}</Text>
                 </TouchableOpacity>
               ))}
@@ -131,11 +191,11 @@ export default function CallScreen() {
       </View>
 
       <View style={styles.actionsGrid}>
-        <ActionBtn active={muted} icon="mic-off" label="Mute" onPress={() => setMuted((m) => !m)} testID="call-btn-mute" />
+        <ActionBtn active={muted} icon="mic-off" label="Mute" onPress={toggleMute} testID="call-btn-mute" />
         <ActionBtn active={keypadOpen} icon="keypad" label="Keypad" onPress={() => setKeypadOpen((k) => !k)} testID="call-btn-keypad" />
-        <ActionBtn active={speaker} icon="volume-high" label="Speaker" onPress={() => setSpeaker((s) => !s)} testID="call-btn-speaker" />
+        <ActionBtn icon="volume-high" label="Speaker" onPress={() => {}} testID="call-btn-speaker" />
         <ActionBtn icon="person-add" label="Add" onPress={() => {}} testID="call-btn-add" />
-        <ActionBtn active={held} icon="pause" label={held ? "Resume" : "Hold"} onPress={() => setHeld((h) => !h)} testID="call-btn-hold" />
+        <ActionBtn active={held} icon="pause" label={held ? "Resume" : "Hold"} onPress={toggleHold} testID="call-btn-hold" />
         <ActionBtn icon="videocam" label="Video" onPress={() => {}} testID="call-btn-video" />
       </View>
 
@@ -175,7 +235,7 @@ const styles = StyleSheet.create({
   viaCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 12, marginTop: 24, borderWidth: 1, borderColor: colors.border, width: "100%" },
   viaLabel: { color: colors.textMuted, fontSize: 11 },
   viaName: { color: "#fff", fontSize: 14, fontWeight: "700", marginTop: 2 },
-  viaDid: { color: colors.primary, fontSize: 12, fontWeight: "600" },
+  viaDid: { color: colors.primary, fontSize: 12, fontWeight: "600", maxWidth: 130 },
   dtmfBox: { marginTop: 20, width: "100%", padding: 12, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   dtmfDigits: { color: "#fff", fontSize: 22, textAlign: "center", letterSpacing: 4, minHeight: 30 },
   dtmfGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 8 },

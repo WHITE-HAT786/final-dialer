@@ -14,6 +14,7 @@ import { colors, spacing } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { useAuth } from "@/src/AuthContext";
 import { useSip } from "@/src/SipContext";
+import { useSipEngine } from "@/src/sip/SipEngineContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const iconFor = (type: string) => {
@@ -39,10 +40,24 @@ export default function Dashboard() {
   const router = useRouter();
   const { user } = useAuth();
   const { selected } = useSip();
+  const engine = useSipEngine();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sipPicker, setSipPicker] = useState(false);
+
+  const sipStatusLabel = (() => {
+    switch (engine.status) {
+      case "registered": return { label: "SIP Registered", color: colors.green };
+      case "connecting": return { label: "Connecting…", color: colors.yellow };
+      case "registration_failed": return { label: "Registration Failed", color: colors.red };
+      case "unsupported": return { label: "SIP Unsupported (Expo Go)", color: colors.yellow };
+      case "error": return { label: "SIP Error", color: colors.red };
+      case "unregistered": return { label: "Unregistered", color: colors.textMuted };
+      case "disconnected":
+      default: return { label: "SIP Disconnected", color: colors.textMuted };
+    }
+  })();
 
   const load = async () => {
     try {
@@ -109,8 +124,11 @@ export default function Dashboard() {
             <Text style={{ color: colors.textMuted }}>({data.profile.name})</Text>
           </Text>
           <View style={styles.sipRow}>
-            <View style={styles.sipDot} />
-            <Text style={styles.sipText}>{data.profile.sip_status}</Text>
+            <View style={[styles.sipDot, { backgroundColor: sipStatusLabel.color }]} />
+            <Text style={[styles.sipText, { color: sipStatusLabel.color }]}>{sipStatusLabel.label}</Text>
+            <TouchableOpacity onPress={() => router.push("/settings")} testID="dashboard-sip-settings" style={styles.sipCog}>
+              <Ionicons name="settings-outline" size={13} color={colors.textMuted} />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -365,6 +383,7 @@ const styles = StyleSheet.create({
   sipRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   sipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.green },
   sipText: { color: colors.green, fontSize: 12, fontWeight: "600" },
+  sipCog: { paddingHorizontal: 4, paddingVertical: 2 },
   sipChipRow: {
     flexDirection: "row",
     alignItems: "center",

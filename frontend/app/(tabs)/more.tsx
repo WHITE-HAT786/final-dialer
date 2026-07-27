@@ -42,6 +42,7 @@ const SECTIONS: { title: string; items: Row[] }[] = [
     title: "ACCOUNT",
     items: [
       { key: "profile", label: "User Profile", icon: "person", route: "/profile", color: colors.primary, bg: colors.primaryDim },
+      { key: "settings", label: "SIP Settings", icon: "settings", route: "/settings", color: colors.teal, bg: colors.tealDim },
       { key: "notifications", label: "Notifications", icon: "notifications", route: "/notifications", color: colors.red, bg: colors.redDim, badge: "3" },
       { key: "support", label: "Help & Support", icon: "help-circle", route: "/support", color: colors.green, bg: colors.greenDim },
     ],
