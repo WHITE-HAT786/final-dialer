@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors, spacing } from "@/src/theme";
 import { useAuth } from "@/src/AuthContext";
+import { useSipEngine } from "@/src/sip/SipEngineContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const DRAWER_W = Math.min(SCREEN_W * 0.82, 340);
@@ -42,6 +43,7 @@ const MANAGE: MenuItem[] = [
 ];
 
 const SUPPORT: MenuItem[] = [
+  { key: "settings", label: "SIP Settings", icon: ["ion", "settings"], route: "/settings" },
   { key: "help", label: "Help & Support", icon: ["ion", "help-circle"], route: "/support" },
   { key: "notifications", label: "Notifications", icon: ["ion", "notifications"], route: "/notifications", badge: "3" },
 ];
@@ -64,6 +66,15 @@ export default function Sidebar({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { status } = useSipEngine();
+  const sipLabel =
+    status === "registered" ? { text: "SIP Registered", color: colors.green } :
+    status === "connecting" ? { text: "Connecting…", color: colors.yellow } :
+    status === "registration_failed" ? { text: "Registration Failed", color: colors.red } :
+    status === "unsupported" ? { text: "SIP Unsupported", color: colors.yellow } :
+    status === "error" ? { text: "SIP Error", color: colors.red } :
+    status === "unregistered" ? { text: "Unregistered", color: colors.textMuted } :
+    { text: "Disconnected", color: colors.textMuted };
   const slide = useRef(new Animated.Value(-DRAWER_W)).current;
   const backdrop = useRef(new Animated.Value(0)).current;
 
@@ -151,8 +162,8 @@ export default function Sidebar({
                 <Text style={{ color: colors.textMuted }}>({user?.name || "John Doe"})</Text>
               </Text>
               <View style={styles.sipInline}>
-                <View style={styles.sipDot} />
-                <Text style={styles.sipInlineText}>SIP Registered</Text>
+                <View style={[styles.sipDot, { backgroundColor: sipLabel.color }]} />
+                <Text style={[styles.sipInlineText, { color: sipLabel.color }]}>{sipLabel.text}</Text>
               </View>
             </View>
             <Ionicons name="chevron-down" size={20} color={colors.textMuted} />

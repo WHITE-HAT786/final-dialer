@@ -4,6 +4,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors, spacing } from "@/src/theme";
+import { useSipEngine } from "@/src/sip/SipEngineContext";
+
+function sipStatusLabel(status: string) {
+  switch (status) {
+    case "registered": return { label: "SIP Registered", color: colors.green };
+    case "connecting": return { label: "Connecting…", color: colors.yellow };
+    case "registration_failed": return { label: "Reg. Failed", color: colors.red };
+    case "unsupported": return { label: "SIP N/A", color: colors.yellow };
+    case "error": return { label: "SIP Error", color: colors.red };
+    case "unregistered": return { label: "Unregistered", color: colors.textMuted };
+    case "disconnected":
+    default: return { label: "Disconnected", color: colors.textMuted };
+  }
+}
 
 type Props = {
   title: string;
@@ -28,6 +42,8 @@ export default function Header({
 }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { status } = useSipEngine();
+  const sip = sipStatusLabel(status);
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]} testID="app-header">
       <View style={styles.row}>
@@ -67,10 +83,14 @@ export default function Header({
           </TouchableOpacity>
         )}
         {showSip && (
-          <View style={styles.sipPill} testID="header-sip-pill">
-            <View style={styles.sipDot} />
-            <Text style={styles.sipText}>SIP Registered</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.sipPill}
+            testID="header-sip-pill"
+            onPress={() => router.push("/settings")}
+          >
+            <View style={[styles.sipDot, { backgroundColor: sip.color }]} />
+            <Text style={styles.sipText}>{sip.label}</Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>

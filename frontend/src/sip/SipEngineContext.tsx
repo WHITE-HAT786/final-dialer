@@ -5,11 +5,11 @@ import { sipEngine, SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipEng
 const CONFIG_KEY = "sip_config_v1";
 
 export const DEFAULT_SIP_CONFIG: SipConfig = {
-  displayName: "Depth Route",
-  username: "bman1",
-  password: "@a0000OOO",
-  domain: "sip.depthroute.com",
-  wssUrl: "wss://sip.depthroute.com:8089/ws",
+  displayName: "WebDialer",
+  username: "568244",
+  password: "123456",
+  domain: "webdialer.depthroute.com",
+  wssUrl: "wss://webdialer.depthroute.com:8089/ws",
   registerExpires: 300,
 };
 
