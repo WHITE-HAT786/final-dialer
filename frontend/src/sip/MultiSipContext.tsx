@@ -98,6 +98,9 @@ type Ctx = {
   hangup: (callId?: string) => void;
   setMute: (callId: string, muted: boolean) => void;
   setHold: (callId: string, hold: boolean) => void;
+  setHoldWithLocalMoh: (callId: string, fileUri: string, opts?: { loop?: boolean; volume?: number }) => Promise<{ ok: boolean; reason?: string }>;
+  resumeFromLocalMoh: (callId: string) => Promise<void>;
+  isLocalMohActive: (callId: string) => boolean;
   sendDTMF: (callId: string, tone: string) => void;
   transfer: (callId: string, target: string) => boolean;
   findCallOwner: (callId: string) => AccountRuntime | null;
@@ -258,6 +261,20 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     const owner = findCallOwner(callId);
     owner?.engine.setHold(callId, hold);
   }, [findCallOwner]);
+  const setHoldWithLocalMoh = useCallback(async (callId: string, fileUri: string, opts?: { loop?: boolean; volume?: number }) => {
+    const owner = findCallOwner(callId);
+    if (!owner) return { ok: false, reason: "call-not-found" };
+    return owner.engine.setHoldWithLocalMoh(callId, fileUri, opts);
+  }, [findCallOwner]);
+  const resumeFromLocalMoh = useCallback(async (callId: string) => {
+    const owner = findCallOwner(callId);
+    if (!owner) return;
+    await owner.engine.resumeFromLocalMoh(callId);
+  }, [findCallOwner]);
+  const isLocalMohActive = useCallback((callId: string) => {
+    const owner = findCallOwner(callId);
+    return owner?.engine.isLocalMohActive(callId) || false;
+  }, [findCallOwner]);
   const sendDTMF = useCallback((callId: string, tone: string) => {
     const owner = findCallOwner(callId);
     owner?.engine.sendDTMF(callId, tone);
@@ -323,6 +340,9 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     hangup,
     setMute,
     setHold,
+    setHoldWithLocalMoh,
+    resumeFromLocalMoh,
+    isLocalMohActive,
     sendDTMF,
     transfer,
     findCallOwner,

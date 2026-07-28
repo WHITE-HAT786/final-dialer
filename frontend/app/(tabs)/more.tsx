@@ -30,6 +30,7 @@ const SECTIONS: { title: string; items: Row[] }[] = [
     title: "MANAGE",
     items: [
       { key: "sip", label: "SIP Accounts", icon: "server", family: "mc", route: "/sip-accounts", color: colors.green, bg: colors.greenDim },
+      { key: "moh", label: "Music on Hold", icon: "music-note-eighth", family: "mc", route: "/moh-settings", color: colors.pink, bg: colors.purpleDim },
       { key: "extensions", label: "Extensions", icon: "people", route: "/extensions", color: colors.purple, bg: colors.purpleDim },
       { key: "numbers", label: "Numbers", icon: "call-outline", route: "/numbers", color: colors.primary, bg: colors.primaryDim },
       { key: "ivr", label: "IVR", icon: "sitemap", family: "mc", route: "/ivr", color: colors.orange, bg: colors.orangeDim },

@@ -8,6 +8,7 @@
 import JsSIP from "jssip";
 import type { RTCSession } from "jssip/lib/RTCSession";
 import { Platform } from "react-native";
+import { startLocalMoh, stopLocalMoh, LocalMohHandle } from "@/src/moh/LocalMoh";
 
 // Suppress noisy default logs; we route everything via our own logger.
 JsSIP.debug.disable();
@@ -84,6 +85,7 @@ export class SipEngine {
   private listeners = new Set<Listener>();
   private audioElement: HTMLAudioElement | null = null;
   private timers: Map<string, any> = new Map();
+  private mohHandles: Map<string, LocalMohHandle> = new Map();
 
   constructor() {
     if (!isWebRtcAvailable) {
@@ -216,6 +218,9 @@ export class SipEngine {
         entry.info.endedAt = Date.now();
         if (cause) entry.info.cause = cause;
         this.stopTimer(id);
+        // Release any local-MOH audio graph for this call.
+        const h = this.mohHandles.get(id);
+        if (h) { stopLocalMoh(h).catch(() => {}); this.mohHandles.delete(id); }
         this.log(state === "ended" ? "info" : "warn", `Call ${state}${cause ? ": " + cause : ""}`);
         this.emit();
         // GC after 3s
@@ -383,6 +388,57 @@ export class SipEngine {
       this.log("info", `Hold: ${hold}`);
       this.emit();
     } catch {}
+  }
+
+  /**
+   * Hold with local Music-On-Hold — keeps the SIP call active (does NOT send a
+   * SIP re-INVITE with sendonly) and instead replaces the outbound mic track
+   * with the given local audio file, so the remote party hears the user's
+   * chosen music. Works only on web (browser preview). On native we log a
+   * warning and fall back to standard `setHold`.
+   */
+  async setHoldWithLocalMoh(
+    id: string,
+    fileUri: string,
+    opts: { loop?: boolean; volume?: number } = {},
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const c = this.calls.get(id);
+    if (!c) return { ok: false, reason: "call-not-found" };
+    const pc: RTCPeerConnection | undefined = (c.session as any).connection;
+    if (!pc) return { ok: false, reason: "no-peerconnection" };
+    const res = await startLocalMoh(pc, fileUri, opts);
+    if (!res.ok || !res.handle) {
+      // Fallback: use standard SIP hold so caller still gets *something*.
+      this.log("warn", `Local MOH unavailable (${res.reason}) — falling back to server MOH`);
+      this.setHold(id, true);
+      return { ok: false, reason: res.reason };
+    }
+    this.mohHandles.set(id, res.handle);
+    c.info.onHold = true;
+    c.info.state = "held";
+    this.log("info", "Local MOH started (mic → local audio file)");
+    this.emit();
+    return { ok: true };
+  }
+
+  /** Resume from local MOH — restores the mic track and marks the call as connected. */
+  async resumeFromLocalMoh(id: string): Promise<void> {
+    const c = this.calls.get(id);
+    if (!c) return;
+    const handle = this.mohHandles.get(id);
+    if (handle) {
+      await stopLocalMoh(handle);
+      this.mohHandles.delete(id);
+    }
+    c.info.onHold = false;
+    c.info.state = "connected";
+    this.log("info", "Local MOH stopped (restored mic)");
+    this.emit();
+  }
+
+  /** True if this call is currently streaming local MOH instead of mic audio. */
+  isLocalMohActive(id: string): boolean {
+    return this.mohHandles.has(id);
   }
 
   sendDTMF(id: string, tone: string) {

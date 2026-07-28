@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
 import { colors } from "@/src/theme";
+import { loadMohPrefs, MohPrefs } from "@/src/moh/MohPrefs";
 
 function fmt(sec: number) {
   const m = Math.floor(sec / 60).toString().padStart(2, "0");
@@ -26,6 +27,8 @@ export default function CallScreen() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferTarget, setTransferTarget] = useState("");
   const [transferInfo, setTransferInfo] = useState<string | null>(null);
+  const [mohPrefs, setMohPrefs] = useState<MohPrefs | null>(null);
+  const [mohNote, setMohNote] = useState<string | null>(null);
 
   // Simulation state (used when no real call is placed)
   const [simSeconds, setSimSeconds] = useState(0);
@@ -33,6 +36,11 @@ export default function CallScreen() {
 
   const pulse = useRef(new Animated.Value(1)).current;
   const dialingRef = useRef(false);
+
+  // Load Music-On-Hold prefs once
+  useEffect(() => {
+    (async () => setMohPrefs(await loadMohPrefs()))();
+  }, []);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -138,7 +146,38 @@ export default function CallScreen() {
     else setSimState("ended");
   };
   const toggleMute = () => { if (callId) multi.setMute(callId, !muted); };
-  const toggleHold = () => { if (callId) multi.setHold(callId, !held); };
+  const toggleHold = async () => {
+    if (!callId) return;
+    setMohNote(null);
+    if (held) {
+      // Resuming — restore either from local-MOH or standard SIP hold.
+      if (multi.isLocalMohActive(callId)) {
+        await multi.resumeFromLocalMoh(callId);
+      } else {
+        multi.setHold(callId, false);
+      }
+      return;
+    }
+    if (mohPrefs?.source === "local" && mohPrefs.fileUri) {
+      const res = await multi.setHoldWithLocalMoh(callId, mohPrefs.fileUri, {
+        loop: mohPrefs.loop,
+        volume: mohPrefs.volume,
+      });
+      if (!res.ok) {
+        if (res.reason === "unsupported") {
+          setMohNote("Local music unavailable on this platform — using server MOH");
+        } else {
+          setMohNote(`Local music error (${res.reason}) — using server MOH`);
+        }
+      } else {
+        setMohNote("Local music playing to caller");
+      }
+      setTimeout(() => setMohNote(null), 3500);
+      return;
+    }
+    // Server MOH (standard SIP hold)
+    multi.setHold(callId, true);
+  };
   const sendDtmf = (t: string) => {
     Haptics.selectionAsync().catch(() => {});
     setDtmf((d) => (d + t).slice(-16));
@@ -197,6 +236,13 @@ export default function CallScreen() {
           <View style={styles.errorBanner} testID="call-error-banner">
             <Ionicons name="alert-circle" size={18} color={colors.red} />
             <Text style={styles.errorText} numberOfLines={5}>{error}</Text>
+          </View>
+        )}
+
+        {mohNote && (
+          <View style={styles.mohNote} testID="call-moh-note">
+            <MaterialCommunityIcons name="music-note" size={16} color={colors.primary} />
+            <Text style={styles.mohNoteText} numberOfLines={2}>{mohNote}</Text>
           </View>
         )}
 
@@ -307,6 +353,20 @@ const styles = StyleSheet.create({
   viaDid: { color: colors.primary, fontSize: 12, fontWeight: "600", maxWidth: 130 },
   errorBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.redDim + "90", borderWidth: 1, borderColor: colors.red + "60", borderRadius: 12, padding: 12, marginTop: 12, width: "100%" },
   errorText: { flex: 1, color: colors.red, fontSize: 12, fontWeight: "600" },
+  mohNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.primaryDim + "80",
+    borderWidth: 1,
+    borderColor: colors.primary + "50",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 10,
+    width: "100%",
+  },
+  mohNoteText: { flex: 1, color: colors.primary, fontSize: 12, fontWeight: "600" },
   dtmfBox: { marginTop: 20, width: "100%", padding: 12, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   dtmfDigits: { color: "#fff", fontSize: 22, textAlign: "center", letterSpacing: 4, minHeight: 30 },
   dtmfGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 8 },
