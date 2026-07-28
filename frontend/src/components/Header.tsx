@@ -86,7 +86,7 @@ export default function Header({
           <TouchableOpacity
             style={styles.sipPill}
             testID="header-sip-pill"
-            onPress={() => router.push("/settings")}
+            onPress={() => router.push("/sip-accounts")}
           >
             <View style={[styles.sipDot, { backgroundColor: sip.color }]} />
             <Text style={styles.sipText}>{sip.label}</Text>
