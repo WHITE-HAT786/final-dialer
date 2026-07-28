@@ -18,39 +18,7 @@ import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
-
-const COUNTRIES = [
-  { flag: "🇺🇸", code: "+1", name: "United States" },
-  { flag: "🇨🇦", code: "+1", name: "Canada" },
-  { flag: "🇬🇧", code: "+44", name: "United Kingdom" },
-  { flag: "🇮🇳", code: "+91", name: "India" },
-  { flag: "🇦🇺", code: "+61", name: "Australia" },
-  { flag: "🇩🇪", code: "+49", name: "Germany" },
-  { flag: "🇫🇷", code: "+33", name: "France" },
-  { flag: "🇪🇸", code: "+34", name: "Spain" },
-  { flag: "🇮🇹", code: "+39", name: "Italy" },
-  { flag: "🇧🇷", code: "+55", name: "Brazil" },
-  { flag: "🇲🇽", code: "+52", name: "Mexico" },
-  { flag: "🇦🇪", code: "+971", name: "UAE" },
-  { flag: "🇸🇦", code: "+966", name: "Saudi Arabia" },
-  { flag: "🇯🇵", code: "+81", name: "Japan" },
-  { flag: "🇨🇳", code: "+86", name: "China" },
-  { flag: "🇰🇷", code: "+82", name: "South Korea" },
-  { flag: "🇸🇬", code: "+65", name: "Singapore" },
-  { flag: "🇭🇰", code: "+852", name: "Hong Kong" },
-  { flag: "🇳🇱", code: "+31", name: "Netherlands" },
-  { flag: "🇷🇺", code: "+7", name: "Russia" },
-  { flag: "🇹🇷", code: "+90", name: "Turkey" },
-  { flag: "🇿🇦", code: "+27", name: "South Africa" },
-  { flag: "🇳🇬", code: "+234", name: "Nigeria" },
-  { flag: "🇪🇬", code: "+20", name: "Egypt" },
-  { flag: "🇵🇰", code: "+92", name: "Pakistan" },
-  { flag: "🇧🇩", code: "+880", name: "Bangladesh" },
-  { flag: "🇮🇩", code: "+62", name: "Indonesia" },
-  { flag: "🇵🇭", code: "+63", name: "Philippines" },
-  { flag: "🇻🇳", code: "+84", name: "Vietnam" },
-  { flag: "🇹🇭", code: "+66", name: "Thailand" },
-];
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/src/data/countries";
 
 const KEYS = [
   ["1", "voicemail"],
@@ -73,7 +41,7 @@ export default function Dialer() {
   const [num, setNum] = useState("");
   const [sipPicker, setSipPicker] = useState(false);
   const [countryPicker, setCountryPicker] = useState(false);
-  const [country, setCountry] = useState(COUNTRIES[0]);
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [countrySearch, setCountrySearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -238,27 +206,6 @@ export default function Dialer() {
           <Ionicons name="keypad" size={22} color={colors.textMuted} />
           <Text style={styles.sideActionLabel}>DTMF</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Balance / talk time / credit */}
-      <View style={styles.metricsRow}>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Balance</Text>
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-            <Text style={[styles.metricValue, { color: colors.green }]}>$125.45</Text>
-            <Text style={styles.metricSuffix}>USD</Text>
-          </View>
-        </View>
-        <View style={styles.metricDivider} />
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Talk Time</Text>
-          <Text style={styles.metricValue}>05:42:18</Text>
-        </View>
-        <View style={styles.metricDivider} />
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Credit Limit</Text>
-          <Text style={[styles.metricValue, { color: colors.primary }]}>$200.00</Text>
-        </View>
       </View>
 
       {/* Quick actions */}
