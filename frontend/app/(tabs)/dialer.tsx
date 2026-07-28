@@ -6,14 +6,51 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
+  Modal,
+  Pressable,
+  FlatList,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
+
+const COUNTRIES = [
+  { flag: "🇺🇸", code: "+1", name: "United States" },
+  { flag: "🇨🇦", code: "+1", name: "Canada" },
+  { flag: "🇬🇧", code: "+44", name: "United Kingdom" },
+  { flag: "🇮🇳", code: "+91", name: "India" },
+  { flag: "🇦🇺", code: "+61", name: "Australia" },
+  { flag: "🇩🇪", code: "+49", name: "Germany" },
+  { flag: "🇫🇷", code: "+33", name: "France" },
+  { flag: "🇪🇸", code: "+34", name: "Spain" },
+  { flag: "🇮🇹", code: "+39", name: "Italy" },
+  { flag: "🇧🇷", code: "+55", name: "Brazil" },
+  { flag: "🇲🇽", code: "+52", name: "Mexico" },
+  { flag: "🇦🇪", code: "+971", name: "UAE" },
+  { flag: "🇸🇦", code: "+966", name: "Saudi Arabia" },
+  { flag: "🇯🇵", code: "+81", name: "Japan" },
+  { flag: "🇨🇳", code: "+86", name: "China" },
+  { flag: "🇰🇷", code: "+82", name: "South Korea" },
+  { flag: "🇸🇬", code: "+65", name: "Singapore" },
+  { flag: "🇭🇰", code: "+852", name: "Hong Kong" },
+  { flag: "🇳🇱", code: "+31", name: "Netherlands" },
+  { flag: "🇷🇺", code: "+7", name: "Russia" },
+  { flag: "🇹🇷", code: "+90", name: "Turkey" },
+  { flag: "🇿🇦", code: "+27", name: "South Africa" },
+  { flag: "🇳🇬", code: "+234", name: "Nigeria" },
+  { flag: "🇪🇬", code: "+20", name: "Egypt" },
+  { flag: "🇵🇰", code: "+92", name: "Pakistan" },
+  { flag: "🇧🇩", code: "+880", name: "Bangladesh" },
+  { flag: "🇮🇩", code: "+62", name: "Indonesia" },
+  { flag: "🇵🇭", code: "+63", name: "Philippines" },
+  { flag: "🇻🇳", code: "+84", name: "Vietnam" },
+  { flag: "🇹🇭", code: "+66", name: "Thailand" },
+];
 
 const KEYS = [
   ["1", "voicemail"],
@@ -35,6 +72,9 @@ export default function Dialer() {
   const { selectedAccount, selectedRuntime, runtimes, call } = useMultiSip();
   const [num, setNum] = useState("");
   const [sipPicker, setSipPicker] = useState(false);
+  const [countryPicker, setCountryPicker] = useState(false);
+  const [country, setCountry] = useState(COUNTRIES[0]);
+  const [countrySearch, setCountrySearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const selName = selectedAccount?.displayName || selectedAccount?.username || "No SIP account";
@@ -78,12 +118,16 @@ export default function Dialer() {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    const res = await call(num, selectedAccount.id);
+    // Compose full E.164-ish target with country code stripping leading zeros / duplicate prefix
+    const cc = country.code.replace(/[^+\d]/g, "");
+    const digits = num.replace(/[^\d*#]/g, "").replace(/^0+/, "");
+    const fullNumber = digits.startsWith(cc.replace("+", "")) ? `+${digits}` : `${cc}${digits}`;
+    const res = await call(fullNumber, selectedAccount.id);
     if (res.error) {
       setError(res.error);
       return;
     }
-    router.push({ pathname: "/call", params: { number: num, name: "Unknown", callId: res.callId || "", accountId: res.accountId || "" } });
+    router.push({ pathname: "/call", params: { number: fullNumber, name: "Unknown", callId: res.callId || "", accountId: res.accountId || "" } });
   };
 
   return (
@@ -119,34 +163,43 @@ export default function Dialer() {
         </View>
       )}
 
-      {/* Tabs (Keypad/Contacts/Recents/More) */}
+      {/* Tabs (Keypad/Contacts/Recents/More) — navigate to real screens */}
       <View style={styles.tabRow}>
         {[
-          { label: "Keypad", icon: "call", active: true },
-          { label: "Contacts", icon: "person-outline" },
-          { label: "Recents", icon: "time-outline" },
-          { label: "More", icon: "ellipsis-horizontal" },
+          { label: "Keypad", icon: "call", route: null, active: true },
+          { label: "Contacts", icon: "person-outline", route: "/(tabs)/contacts" },
+          { label: "Recents", icon: "time-outline", route: "/(tabs)/call-logs" },
+          { label: "More", icon: "ellipsis-horizontal", route: "/(tabs)/more" },
         ].map((t, i) => (
-          <View key={i} style={[styles.tab, t.active && styles.tabActive]}>
+          <TouchableOpacity
+            key={i}
+            style={[styles.tab, t.active && styles.tabActive]}
+            onPress={() => t.route && router.push(t.route as any)}
+            testID={`dialer-tab-${t.label.toLowerCase()}`}
+          >
             <Ionicons name={t.icon as any} size={20} color={t.active ? colors.green : colors.textMuted} />
             <Text style={[styles.tabLabel, t.active && { color: colors.green }]}>{t.label}</Text>
             {t.active && <View style={styles.tabUnderline} />}
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
       {/* Number input */}
       <View style={styles.numberRow} testID="dialer-number-row">
-        <View style={styles.flag}>
-          <Text style={{ fontSize: 16 }}>🇺🇸</Text>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>+1</Text>
+        <TouchableOpacity
+          style={styles.flag}
+          onPress={() => setCountryPicker(true)}
+          testID="dialer-country-picker"
+        >
+          <Text style={{ fontSize: 16 }}>{country.flag}</Text>
+          <Text style={{ color: "#fff", fontWeight: "600" }}>{country.code}</Text>
           <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
-        </View>
+        </TouchableOpacity>
         <TextInput
           style={styles.numberInput}
           value={num}
           onChangeText={setNum}
-          placeholder="Enter number or contact"
+          placeholder="Enter number (e.g. 5551234)"
           placeholderTextColor={colors.textDim}
           showSoftInputOnFocus={false}
           testID="dialer-input"
@@ -219,6 +272,48 @@ export default function Dialer() {
         </View>
       </View>
       <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} />
+
+      {/* Country code picker */}
+      <Modal visible={countryPicker} transparent animationType="slide" onRequestClose={() => setCountryPicker(false)}>
+        <Pressable style={countryStyles.backdrop} onPress={() => setCountryPicker(false)} />
+        <View style={countryStyles.sheet} testID="country-picker-sheet">
+          <View style={countryStyles.handle} />
+          <View style={countryStyles.header}>
+            <Text style={countryStyles.title}>Select Country Code</Text>
+            <TouchableOpacity onPress={() => setCountryPicker(false)} testID="country-picker-close">
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+          <View style={countryStyles.searchBox}>
+            <Ionicons name="search" size={16} color={colors.textMuted} />
+            <TextInput
+              style={countryStyles.searchInput}
+              placeholder="Search country or code…"
+              placeholderTextColor={colors.textDim}
+              value={countrySearch}
+              onChangeText={setCountrySearch}
+              testID="country-picker-search"
+            />
+          </View>
+          <FlatList
+            data={COUNTRIES.filter((c) => !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.includes(countrySearch))}
+            keyExtractor={(item, i) => `${item.name}-${i}`}
+            style={{ maxHeight: 380 }}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={countryStyles.row}
+                onPress={() => { setCountry(item); setCountryPicker(false); setCountrySearch(""); }}
+                testID={`country-item-${item.code}`}
+              >
+                <Text style={{ fontSize: 22 }}>{item.flag}</Text>
+                <Text style={countryStyles.name}>{item.name}</Text>
+                <Text style={countryStyles.code}>{item.code}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -394,4 +489,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   qaHeader: { color: "#fff", fontSize: 15, fontWeight: "600" },
+});
+
+const countryStyles = StyleSheet.create({
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "85%", backgroundColor: "#0C1526", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20, borderWidth: 1, borderColor: colors.border },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 12 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.bgAlt, borderRadius: 10, paddingHorizontal: 12, height: 42, marginTop: 12, borderWidth: 1, borderColor: colors.border },
+  searchInput: { flex: 1, color: "#fff", fontSize: 14 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
+  name: { color: "#fff", fontSize: 14, flex: 1 },
+  code: { color: colors.primary, fontWeight: "700", fontSize: 14 },
 });

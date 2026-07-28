@@ -52,9 +52,7 @@ export default function SipAccountsScreen() {
   }, [runtimes]);
 
   const startAdd = () => setForm({
-    ...DEFAULT_ACCOUNT,
-    // pre-fill only when list is empty; otherwise blank for a fresh account
-    ...(runtimes.length === 0 ? DEFAULT_ACCOUNT : { displayName: "", username: "", password: "", domain: "", wssUrl: "wss://", callerId: "", authUser: "", enabled: true }),
+    ...(runtimes.length === 0 ? { ...DEFAULT_ACCOUNT } : { displayName: "", username: "", password: "", domain: "", host: "", port: 5060, transport: "UDP" as any, wssUrl: "", callerId: "", authUser: "", enabled: true }),
   });
 
   const startEdit = (r: any) => setForm({
@@ -63,7 +61,10 @@ export default function SipAccountsScreen() {
     username: r.account.username,
     password: r.account.password,
     domain: r.account.domain,
-    wssUrl: r.account.wssUrl,
+    host: r.account.host || r.account.domain || "",
+    port: r.account.port || 5060,
+    transport: r.account.transport || "WSS",
+    wssUrl: r.account.wssUrl || "",
     callerId: r.account.callerId || "",
     authUser: r.account.authUser || "",
     enabled: r.account.enabled,
@@ -71,29 +72,21 @@ export default function SipAccountsScreen() {
 
   const doSave = async () => {
     if (!form) return;
-    if (form.id) {
-      await updateAccount(form.id, {
-        displayName: form.displayName,
-        username: form.username,
-        password: form.password,
-        domain: form.domain,
-        wssUrl: form.wssUrl,
-        callerId: form.callerId,
-        authUser: form.authUser,
-        enabled: form.enabled,
-      });
-    } else {
-      await addAccount({
-        displayName: form.displayName,
-        username: form.username,
-        password: form.password,
-        domain: form.domain,
-        wssUrl: form.wssUrl,
-        callerId: form.callerId,
-        authUser: form.authUser,
-        enabled: form.enabled,
-      });
-    }
+    const patch = {
+      displayName: form.displayName,
+      username: form.username,
+      password: form.password,
+      domain: form.domain,
+      host: form.host,
+      port: Number(form.port) || 5060,
+      transport: form.transport,
+      wssUrl: form.wssUrl,
+      callerId: form.callerId,
+      authUser: form.authUser,
+      enabled: form.enabled,
+    };
+    if (form.id) await updateAccount(form.id, patch);
+    else await addAccount(patch);
     setForm(null);
   };
 
@@ -157,7 +150,7 @@ export default function SipAccountsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={1}>{r.account.displayName || r.account.username}</Text>
-                <Text style={styles.sub} numberOfLines={1}>{r.account.username}@{r.account.domain}</Text>
+                <Text style={styles.sub} numberOfLines={1}>{r.account.username}@{r.account.host || r.account.domain}{r.account.port ? `:${r.account.port}` : ""} <Text style={{ color: colors.primary, fontWeight: "700" }}>{r.account.transport || "WSS"}</Text></Text>
                 {r.account.callerId ? (
                   <Text style={styles.sub} numberOfLines={1}>CLID: <Text style={{ color: colors.primary }}>{r.account.callerId}</Text></Text>
                 ) : null}
@@ -274,11 +267,46 @@ function AccountFormModal({ form, onChange, onSave, onCancel }: any) {
             <TextInput style={styles.input} value={form.password} onChangeText={(t) => setF({ password: t })} secureTextEntry placeholder="••••••" placeholderTextColor={colors.textDim} testID="form-password" />
           </Field>
           <Field label="Domain / Realm">
-            <TextInput style={styles.input} value={form.domain} onChangeText={(t) => setF({ domain: t })} autoCapitalize="none" placeholder="webdialer.depthroute.com" placeholderTextColor={colors.textDim} testID="form-domain" />
+            <TextInput style={styles.input} value={form.domain} onChangeText={(t) => setF({ domain: t })} autoCapitalize="none" placeholder="sip.depthroute.com" placeholderTextColor={colors.textDim} testID="form-domain" />
           </Field>
-          <Field label="WSS URL">
-            <TextInput style={styles.input} value={form.wssUrl} onChangeText={(t) => setF({ wssUrl: t })} autoCapitalize="none" placeholder="wss://host:8089/ws" placeholderTextColor={colors.textDim} testID="form-wss" />
+          <Field label="SIP Host (server address)">
+            <TextInput style={styles.input} value={form.host || ""} onChangeText={(t) => setF({ host: t })} autoCapitalize="none" placeholder="sip.depthroute.com" placeholderTextColor={colors.textDim} testID="form-host" />
           </Field>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>Port</Text>
+              <TextInput style={styles.input} value={String(form.port || "")} onChangeText={(t) => setF({ port: t.replace(/[^0-9]/g, "") })} keyboardType="numeric" placeholder="5060" placeholderTextColor={colors.textDim} testID="form-port" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>Transport</Text>
+              <View style={styles.transportRow}>
+                {(["UDP", "TCP", "TLS", "WSS"] as const).map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.transportChip, form.transport === t && styles.transportChipActive]}
+                    onPress={() => {
+                      const defaultPort = t === "TLS" ? 5061 : t === "WSS" ? 8089 : 5060;
+                      setF({ transport: t, port: form.port || defaultPort });
+                    }}
+                    testID={`form-transport-${t}`}
+                  >
+                    <Text style={[styles.transportText, form.transport === t && { color: "#fff" }]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+          {form.transport && form.transport !== "WSS" && (form.transport as any) !== "WS" && (
+            <View style={styles.warn} testID="form-transport-warn">
+              <Ionicons name="warning" size={14} color={colors.yellow} />
+              <Text style={styles.warnText}>{form.transport} transport can&apos;t register from a browser preview. Only WSS works here. UDP/TCP/TLS registers in a native build (react-native-pjsip).</Text>
+            </View>
+          )}
+          {form.transport === "WSS" && (
+            <Field label="Custom WSS URL (optional)">
+              <TextInput style={styles.input} value={form.wssUrl || ""} onChangeText={(t) => setF({ wssUrl: t })} autoCapitalize="none" placeholder="Auto: wss://host:port/ws" placeholderTextColor={colors.textDim} testID="form-wss" />
+            </Field>
+          )}
           <Field label="Caller ID (optional)">
             <TextInput style={styles.input} value={form.callerId} onChangeText={(t) => setF({ callerId: t })} placeholder="+1 555-000-0000" placeholderTextColor={colors.textDim} testID="form-callerId" />
           </Field>
@@ -349,6 +377,12 @@ const styles = StyleSheet.create({
   mHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   mTitle: { color: "#fff", fontWeight: "700", fontSize: 17 },
   input: { backgroundColor: colors.bgAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: colors.border },
+  transportRow: { flexDirection: "row", gap: 4 },
+  transportChip: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: "center", backgroundColor: colors.bgAlt },
+  transportChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  transportText: { color: colors.textMuted, fontSize: 11, fontWeight: "700" },
+  warn: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10, borderRadius: 10, backgroundColor: colors.yellowDim + "80", borderWidth: 1, borderColor: colors.yellow + "40", marginTop: 10 },
+  warnText: { flex: 1, color: colors.yellow, fontSize: 11, fontWeight: "600" },
   switchRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 16, paddingVertical: 10 },
   saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.primary, marginTop: 18 },
   saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },

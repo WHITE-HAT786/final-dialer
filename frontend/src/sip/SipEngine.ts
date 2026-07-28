@@ -393,6 +393,23 @@ export class SipEngine {
       this.log("info", `DTMF ${tone}`);
     } catch {}
   }
+
+  /** Blind transfer via SIP REFER. Returns true if the transfer request was sent. */
+  transfer(id: string, target: string): boolean {
+    const c = this.calls.get(id);
+    if (!c || !this.config) return false;
+    const dest = target.includes("@")
+      ? (target.startsWith("sip:") ? target : `sip:${target}`)
+      : `sip:${target}@${this.config.domain}`;
+    try {
+      (c.session as any).refer(dest);
+      this.log("info", `Transferring to ${dest}`);
+      return true;
+    } catch (e: any) {
+      this.log("error", "Transfer failed", { err: String(e) });
+      return false;
+    }
+  }
 }
 
 export const sipEngineInstance = new SipEngine(); // legacy single-account fallback

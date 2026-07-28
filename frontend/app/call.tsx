@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Modal, Pressable, TextInput } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,6 +23,9 @@ export default function CallScreen() {
   const [keypadOpen, setKeypadOpen] = useState(false);
   const [dtmf, setDtmf] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferTarget, setTransferTarget] = useState("");
+  const [transferInfo, setTransferInfo] = useState<string | null>(null);
 
   // Simulation state (used when no real call is placed)
   const [simSeconds, setSimSeconds] = useState(0);
@@ -215,7 +218,7 @@ export default function CallScreen() {
         <ActionBtn active={muted} icon="mic-off" label="Mute" onPress={toggleMute} testID="call-btn-mute" />
         <ActionBtn active={keypadOpen} icon="keypad" label="Keypad" onPress={() => setKeypadOpen((k) => !k)} testID="call-btn-keypad" />
         <ActionBtn icon="volume-high" label="Speaker" onPress={() => {}} testID="call-btn-speaker" />
-        <ActionBtn icon="person-add" label="Add" onPress={() => {}} testID="call-btn-add" />
+        <ActionBtn icon="swap-horizontal" label="Transfer" onPress={() => setTransferOpen(true)} testID="call-btn-transfer" />
         <ActionBtn active={held} icon="pause" label={held ? "Resume" : "Hold"} onPress={toggleHold} testID="call-btn-hold" />
         <ActionBtn icon="videocam" label="Video" onPress={() => {}} testID="call-btn-video" />
       </View>
@@ -223,6 +226,51 @@ export default function CallScreen() {
       <TouchableOpacity style={styles.hangup} onPress={hangup} testID="call-hangup">
         <Ionicons name="call" size={30} color="#fff" style={{ transform: [{ rotate: "135deg" }] }} />
       </TouchableOpacity>
+
+      {/* Transfer modal */}
+      <Modal visible={transferOpen} transparent animationType="slide" onRequestClose={() => setTransferOpen(false)}>
+        <Pressable style={styles.tBackdrop} onPress={() => setTransferOpen(false)} />
+        <View style={styles.tSheet} testID="transfer-sheet">
+          <View style={styles.tHandle} />
+          <Text style={styles.tTitle}>Blind Transfer</Text>
+          <Text style={styles.tHelp}>Send the current call to another extension or number.</Text>
+          <TextInput
+            style={styles.tInput}
+            value={transferTarget}
+            onChangeText={setTransferTarget}
+            placeholder="Extension or number"
+            placeholderTextColor={colors.textDim}
+            autoCapitalize="none"
+            keyboardType="phone-pad"
+            testID="transfer-input"
+          />
+          {transferInfo && <Text style={styles.tInfo}>{transferInfo}</Text>}
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+            <TouchableOpacity style={styles.tCancel} onPress={() => { setTransferOpen(false); setTransferInfo(null); }} testID="transfer-cancel">
+              <Text style={{ color: "#fff", fontWeight: "600" }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.tGo}
+              onPress={() => {
+                setTransferInfo(null);
+                if (!transferTarget.trim()) { setTransferInfo("Enter a target first"); return; }
+                if (!callId) { setTransferInfo("Transfer requires a live SIP call"); return; }
+                const ok = multi.transfer(callId, transferTarget.trim());
+                if (ok) {
+                  setTransferInfo(`REFER sent to ${transferTarget.trim()}`);
+                  setTimeout(() => { setTransferOpen(false); setTransferInfo(null); setTransferTarget(""); }, 1200);
+                } else {
+                  setTransferInfo("Transfer failed — see SIP log");
+                }
+              }}
+              testID="transfer-go"
+            >
+              <Ionicons name="swap-horizontal" size={16} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700" }}>Transfer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -270,4 +318,13 @@ const styles = StyleSheet.create({
   actionBtnActive: { backgroundColor: "#fff", borderColor: "#fff" },
   actionLabel: { color: "#fff", fontSize: 12 },
   hangup: { alignSelf: "center", width: 72, height: 72, borderRadius: 36, backgroundColor: colors.red, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  tBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  tSheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: "#0C1526", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30, borderWidth: 1, borderColor: colors.border },
+  tHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 12 },
+  tTitle: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 4 },
+  tHelp: { color: colors.textMuted, fontSize: 12, marginBottom: 14 },
+  tInput: { backgroundColor: colors.bgAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, color: "#fff", fontSize: 15, borderWidth: 1, borderColor: colors.border },
+  tInfo: { color: colors.yellow, fontSize: 12, marginTop: 10 },
+  tCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.card, alignItems: "center", borderWidth: 1, borderColor: colors.border },
+  tGo: { flex: 1.2, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.primary, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6 },
 });

@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only regression for the UDP switch + Port field + functional Dialer sub-tabs + Country picker + Transfer button. All 8 requested checks PASSED against https://mobile-design-dev.preview.emergentagent.com after logging in as demo@depthroute.com/demo1234. (1) Empty state's 'sip-empty-add-demo' creates a card whose subtitle reads 'bman1@sip.depthroute.com:5060 UDP' and whose pill is 'Disconnected' (grey) — never 'Connecting…' or 'Registration Failed' — because MultiSipContext.canRegisterInBrowser() correctly skips connect() for non-WSS transports. Verified visually in screenshot. (2) The Add form (sip-form-sheet) exposes new testIDs form-host, form-port, form-transport-UDP/TCP/TLS/WSS. Selecting UDP shows form-transport-warn ('UDP transport can't register from a browser preview…'); selecting WSS hides that warning and reveals form-wss (optional custom URL). (3) dialer-tab-contacts → /contacts, dialer-tab-recents → /call-logs, dialer-tab-more → /more. dialer-tab-keypad is intentionally passive (no navigation). (4) dialer-country-picker opens country-picker-sheet with 30 countries. Typing 'india' in country-picker-search filters correctly; tapping country-item-+91 closes the sheet and the flag chip now shows 🇮🇳 +91. (5) Pressing dialer-call with no digits typed shows dialer-error-banner 'Enter a number first'. (6) After typing '9876543210' with the bman1 account added (UDP, disconnected), pressing dialer-call shows 'Account \"Depth Route\" is not registered (disconnected). Fix in SIP Accounts.' — contains 'not registered' as required and does NOT navigate to /call (URL stays /dialer). (7) On /call?callId=&accountId= (simulation), all required testIDs exist: call-btn-mute, call-btn-hold, call-btn-keypad, call-btn-transfer, call-hangup. Tapping call-btn-transfer opens transfer-sheet with transfer-input, transfer-go, transfer-cancel. Entering a target ('1000') and tapping transfer-go shows the expected info message 'Transfer requires a live SIP call' (because sim has no callId), matching the spec exactly. (8) Regression check — Dashboard header-sip-pill still navigates to /sip-accounts. Zero critical issues, zero design regressions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "RN-web Animated (call.tsx pulse ring)", "issue": "Console warning: 'Animated: useNativeDriver is not supported because the native animated module is missing. Falling back to JS-based animation.' Web-only warning caused by useNativeDriver:true on Animated.timing in /app/frontend/app/call.tsx (lines 40-41). Harmless on web (falls back to JS driver) but pollutes console. Reference: /app/frontend/app/call.tsx:40-41"},
+      {"component": "RN-web pointerEvents prop", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Emitted by an RN-web component (likely Screen/SafeArea or a Modal backdrop) on nearly every screen. Cosmetic only. Search the codebase for pointerEvents={...} and move it into style={{pointerEvents: ...}}."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_7.json"],
+  "action_items": [
+    "(Optional cosmetic) For call.tsx pulse animation, set useNativeDriver: Platform.OS !== 'web' to silence the web warning without changing native behavior.",
+    "(Optional cosmetic) Grep for `pointerEvents=` prop usages and migrate to `style={{ pointerEvents }}` per RN-web deprecation."
+  ],
+  "critical_code_review_comments": [
+    "MultiSipContext.canRegisterInBrowser() correctly gates auto-connect and manual connect() for UDP/TCP/TLS so JsSIP is never asked to attempt an impossible transport — exactly the design the user asked for.",
+    "DEFAULT_ACCOUNT correctly points to bman1 / @a0000OOO / sip.depthroute.com / UDP / 5060 (MultiSipContext.tsx L37-49).",
+    "Dialer's fullNumber composition strips leading zeros and de-duplicates the country code prefix (dialer.tsx L122-124). Reasonable heuristic for E.164 dial-out.",
+    "call.tsx Transfer modal correctly disambiguates: no callId → 'Transfer requires a live SIP call'; live callId + failed REFER → 'Transfer failed — see SIP log'; success → 'REFER sent to <target>' with auto-close. Good UX."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only per request)", "frontend": "100% (8/8 scenarios passed)"},
+  "seed_data_creation": "One bman1/UDP SIP account created via 'Add Demo Account' in browser secureStore during the test run. Lives only in this browser session; no backend seed created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login testIDs: login-email / login-password / login-submit-button. Demo creds: demo@depthroute.com / demo1234. Adding the demo account produces UDP/5060 bman1@sip.depthroute.com — the 'Disconnected' status is BY DESIGN (browser cannot register UDP). To see a real 'Registered' state you'd need to edit the account to WSS on a server exposing wss://.../ws. Country picker uses testIDs country-item-<code> (e.g. country-item-+91). Transfer modal only shows a success message when there is a live SIP callId; simulation navigations to /call always yield 'Transfer requires a live SIP call'.",
+  "rca_of_issue": "N/A — this iteration was a feature verification pass, not a bug fix. All new UI/UX (Port field, transport chips + warning, country picker, functional dialer sub-tabs, Transfer sheet) works exactly as specified."
+}

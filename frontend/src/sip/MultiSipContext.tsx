@@ -11,11 +11,14 @@ export type SipAccount = {
   username: string;
   password: string;
   domain: string;
-  wssUrl: string;
-  callerId?: string;      // shown as CLID on outgoing calls (informational)
-  authUser?: string;      // if server auth user differs from extension
-  enabled: boolean;       // auto-register on app load
-  color?: string;         // UI badge color
+  host?: string;          // SIP host (defaults to domain if empty)
+  port?: number;          // SIP port (5060 UDP/TCP, 5061 TLS, 443/8089 WSS)
+  transport?: "UDP" | "TCP" | "TLS" | "WSS";
+  wssUrl?: string;        // used only when transport === "WSS"; auto-derived if missing
+  callerId?: string;
+  authUser?: string;
+  enabled: boolean;
+  color?: string;
 };
 
 export type AccountRuntime = {
@@ -32,11 +35,14 @@ const SELECTED_KEY = "sip_selected_account_v1";
 const ACCENT_COLORS = ["#22C55E", "#3B82F6", "#A855F7", "#F59E0B", "#14B8A6", "#EC4899", "#EF4444"];
 
 export const DEFAULT_ACCOUNT: Omit<SipAccount, "id" | "color"> = {
-  displayName: "WebDialer",
-  username: "568244",
-  password: "123456",
-  domain: "webdialer.depthroute.com",
-  wssUrl: "wss://webdialer.depthroute.com:8089/ws",
+  displayName: "Depth Route",
+  username: "bman1",
+  password: "@a0000OOO",
+  domain: "sip.depthroute.com",
+  host: "sip.depthroute.com",
+  port: 5060,
+  transport: "UDP",
+  wssUrl: "",
   callerId: "",
   authUser: "",
   enabled: true,
@@ -47,14 +53,30 @@ function accountId() {
 }
 
 function toConfig(a: SipAccount): SipConfig {
+  const host = a.host || a.domain;
+  const transport = a.transport || "WSS";
+  let wssUrl = a.wssUrl || "";
+  if (transport === "WSS" && !wssUrl) {
+    const port = a.port || 8089;
+    wssUrl = `wss://${host}:${port}/ws`;
+  } else if (transport === "WS" as any) {
+    const port = a.port || 8088;
+    wssUrl = `ws://${host}:${port}/ws`;
+  }
   return {
     displayName: a.displayName || a.username,
     username: a.username,
     password: a.password,
     domain: a.domain,
-    wssUrl: a.wssUrl,
+    wssUrl,
     registerExpires: 300,
   };
+}
+
+// UDP/TCP/TLS cannot register from a browser — only WSS/WS works.
+function canRegisterInBrowser(a: SipAccount): boolean {
+  const t = a.transport || "WSS";
+  return t === "WSS" || (t as any) === "WS";
 }
 
 type Ctx = {
@@ -77,6 +99,7 @@ type Ctx = {
   setMute: (callId: string, muted: boolean) => void;
   setHold: (callId: string, hold: boolean) => void;
   sendDTMF: (callId: string, tone: string) => void;
+  transfer: (callId: string, target: string) => boolean;
   findCallOwner: (callId: string) => AccountRuntime | null;
   activeCall: { call: CallInfo; runtime: AccountRuntime } | null;
 };
@@ -108,9 +131,9 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
       const sel = (await storage.getItem<string>(SELECTED_KEY, "")) || (list[0]?.id ?? null);
       setAccounts(list);
       setSelectedId(sel);
-      // Auto-connect enabled accounts
+      // Auto-connect enabled accounts (only if browser-compatible transport)
       list.forEach((a) => {
-        if (a.enabled) {
+        if (a.enabled && canRegisterInBrowser(a)) {
           const eng = ensureEngine(a);
           eng.connect(toConfig(a));
         }
@@ -134,7 +157,7 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
       setSelectedId(id);
       await storage.setItem(SELECTED_KEY, id);
     }
-    if (account.enabled) {
+    if (account.enabled && canRegisterInBrowser(account)) {
       const eng = ensureEngine(account);
       eng.connect(toConfig(account));
     }
@@ -148,7 +171,7 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     if (!updated) return;
     const eng = ensureEngine(updated);
     await eng.disconnect();
-    if (updated.enabled) await eng.connect(toConfig(updated));
+    if (updated.enabled && canRegisterInBrowser(updated)) await eng.connect(toConfig(updated));
   }, [accounts, ensureEngine, persist]);
 
   const removeAccount: Ctx["removeAccount"] = useCallback(async (id) => {
@@ -239,6 +262,11 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     const owner = findCallOwner(callId);
     owner?.engine.sendDTMF(callId, tone);
   }, [findCallOwner]);
+  const transfer = useCallback((callId: string, target: string) => {
+    const owner = findCallOwner(callId);
+    if (!owner) return false;
+    return owner.engine.transfer(callId, target);
+  }, [findCallOwner]);
 
   const runtimes: AccountRuntime[] = useMemo(() => {
     void tick; // re-render trigger
@@ -296,6 +324,7 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     setMute,
     setHold,
     sendDTMF,
+    transfer,
     findCallOwner,
     activeCall,
   };
