@@ -13,8 +13,7 @@ import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { useAuth } from "@/src/AuthContext";
-import { useSip } from "@/src/SipContext";
-import { useSipEngine } from "@/src/sip/SipEngineContext";
+import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const iconFor = (type: string) => {
@@ -39,25 +38,30 @@ const statIcon = (icon: string) => {
 export default function Dashboard() {
   const router = useRouter();
   const { user } = useAuth();
-  const { selected } = useSip();
-  const engine = useSipEngine();
+  const { selectedAccount, selectedRuntime, runtimes } = useMultiSip();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sipPicker, setSipPicker] = useState(false);
 
+  const status = selectedRuntime?.status;
   const sipStatusLabel = (() => {
-    switch (engine.status) {
+    switch (status) {
       case "registered": return { label: "SIP Registered", color: colors.green };
       case "connecting": return { label: "Connecting…", color: colors.yellow };
       case "registration_failed": return { label: "Registration Failed", color: colors.red };
-      case "unsupported": return { label: "SIP Unsupported (Expo Go)", color: colors.yellow };
+      case "unsupported": return { label: "SIP Unsupported", color: colors.yellow };
       case "error": return { label: "SIP Error", color: colors.red };
       case "unregistered": return { label: "Unregistered", color: colors.textMuted };
-      case "disconnected":
-      default: return { label: "SIP Disconnected", color: colors.textMuted };
+      case "disconnected": return { label: "SIP Disconnected", color: colors.textMuted };
+      default: return { label: runtimes.length === 0 ? "No SIP account" : "SIP Disconnected", color: colors.textMuted };
     }
   })();
+  const selected = {
+    name: selectedAccount?.displayName || selectedAccount?.username || "No account",
+    color: (selectedAccount?.color as string) || colors.primary,
+    did: selectedAccount?.callerId || (selectedAccount ? `${selectedAccount.username}@${selectedAccount.domain}` : "Tap to add"),
+  };
 
   const load = async () => {
     try {
@@ -126,7 +130,7 @@ export default function Dashboard() {
           <View style={styles.sipRow}>
             <View style={[styles.sipDot, { backgroundColor: sipStatusLabel.color }]} />
             <Text style={[styles.sipText, { color: sipStatusLabel.color }]}>{sipStatusLabel.label}</Text>
-            <TouchableOpacity onPress={() => router.push("/settings")} testID="dashboard-sip-settings" style={styles.sipCog}>
+            <TouchableOpacity onPress={() => router.push("/sip-accounts")} testID="dashboard-sip-settings" style={styles.sipCog}>
               <Ionicons name="settings-outline" size={13} color={colors.textMuted} />
             </TouchableOpacity>
           </View>

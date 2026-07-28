@@ -43,7 +43,6 @@ const MANAGE: MenuItem[] = [
 ];
 
 const SUPPORT: MenuItem[] = [
-  { key: "settings", label: "SIP Settings", icon: ["ion", "settings"], route: "/settings" },
   { key: "help", label: "Help & Support", icon: ["ion", "help-circle"], route: "/support" },
   { key: "notifications", label: "Notifications", icon: ["ion", "notifications"], route: "/notifications", badge: "3" },
 ];

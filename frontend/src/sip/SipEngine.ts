@@ -395,4 +395,4 @@ export class SipEngine {
   }
 }
 
-export const sipEngine = new SipEngine();
+export const sipEngineInstance = new SipEngine(); // legacy single-account fallback

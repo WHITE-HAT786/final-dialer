@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/AuthContext";
-import { SipProvider } from "@/src/SipContext";
 import { SipEngineProvider } from "@/src/sip/SipEngineContext";
 import IncomingCallOverlay from "@/src/components/IncomingCallOverlay";
 
@@ -29,13 +28,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#050B1A" }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <SipProvider>
-            <SipEngineProvider>
-              <StatusBar barStyle="light-content" backgroundColor="#050B1A" />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#050B1A" } }} />
-              <IncomingCallOverlay />
-            </SipEngineProvider>
-          </SipProvider>
+          <SipEngineProvider>
+            <StatusBar barStyle="light-content" backgroundColor="#050B1A" />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#050B1A" } }} />
+            <IncomingCallOverlay />
+          </SipEngineProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

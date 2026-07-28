@@ -1,107 +1,92 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
-import { storage } from "@/src/utils/storage";
-import { sipEngine, SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipEngine";
-
-const CONFIG_KEY = "sip_config_v1";
+// Backward-compat shim — maps the old single-account API to the new MultiSipContext.
+// Existing components using `useSipEngine()` and `<SipEngineProvider>` keep working
+// but everything is now routed through the multi-account engine.
+import React, { ReactNode } from "react";
+import { MultiSipProvider, useMultiSip, DEFAULT_ACCOUNT } from "./MultiSipContext";
+import type { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipEngine";
 
 export const DEFAULT_SIP_CONFIG: SipConfig = {
-  displayName: "WebDialer",
-  username: "568244",
-  password: "123456",
-  domain: "webdialer.depthroute.com",
-  wssUrl: "wss://webdialer.depthroute.com:8089/ws",
+  ...DEFAULT_ACCOUNT,
   registerExpires: 300,
 };
 
-type Ctx = {
-  supported: boolean;
-  config: SipConfig | null;
-  status: SipStatus;
-  activeCall: CallInfo | null;
-  calls: CallInfo[];
-  logs: SipLogEntry[];
-  saveConfig: (cfg: SipConfig) => Promise<void>;
-  clearConfig: () => Promise<void>;
-  connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
-  call: (target: string) => Promise<string | null>;
-  answer: (id: string) => void;
-  hangup: (id?: string) => void;
-  setMute: (id: string, muted: boolean) => void;
-  setHold: (id: string, hold: boolean) => void;
-  sendDTMF: (id: string, tone: string) => void;
-};
-
-const SipEngineContext = createContext<Ctx | null>(null);
-
 export function SipEngineProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<SipConfig | null>(null);
-  const [tick, setTick] = useState(0);
-  const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+  return <MultiSipProvider>{children}</MultiSipProvider>;
+}
 
-  useEffect(() => {
-    (async () => {
-      const stored = await storage.secureGet<SipConfig | null>(CONFIG_KEY, null);
-      setConfig(stored || null);
-    })();
-    const unsub = sipEngine.subscribe(forceUpdate);
-    return () => { unsub(); };
-  }, [forceUpdate]);
+/**
+ * Legacy hook — maps to selected account.
+ * config -> selectedAccount, status -> selectedRuntime.status
+ * saveConfig -> updateAccount or addAccount if none
+ * clearConfig -> removeAccount (selected)
+ * activeCall/calls -> across all engines
+ */
+export function useSipEngine() {
+  const m = useMultiSip();
+  const sel = m.selectedAccount;
+  const runtime = m.selectedRuntime;
+  const status: SipStatus = runtime?.status || (m.supported ? "disconnected" : "unsupported");
 
-  const saveConfig = useCallback(async (cfg: SipConfig) => {
-    await storage.secureSet(CONFIG_KEY, cfg);
-    setConfig(cfg);
-  }, []);
+  const config: SipConfig | null = sel ? {
+    displayName: sel.displayName,
+    username: sel.username,
+    password: sel.password,
+    domain: sel.domain,
+    wssUrl: sel.wssUrl,
+    registerExpires: 300,
+  } : null;
 
-  const clearConfig = useCallback(async () => {
-    await storage.secureRemove(CONFIG_KEY);
-    setConfig(null);
-    await sipEngine.disconnect();
-  }, []);
+  const calls: CallInfo[] = m.runtimes.flatMap((r) => r.calls);
+  const activeCall: CallInfo | null = m.activeCall?.call || null;
+  const logs: SipLogEntry[] = m.aggregateLogs;
 
-  const connect = useCallback(async () => {
-    if (!config) return;
-    await sipEngine.connect(config);
-  }, [config]);
-
-  const disconnect = useCallback(async () => {
-    await sipEngine.disconnect();
-  }, []);
-
-  // Auto-connect once we have a config
-  useEffect(() => {
-    if (config) {
-      sipEngine.connect(config);
+  const saveConfig = async (cfg: SipConfig) => {
+    if (sel) {
+      await m.updateAccount(sel.id, {
+        displayName: cfg.displayName,
+        username: cfg.username,
+        password: cfg.password,
+        domain: cfg.domain,
+        wssUrl: cfg.wssUrl,
+      });
+    } else {
+      await m.addAccount({
+        displayName: cfg.displayName,
+        username: cfg.username,
+        password: cfg.password,
+        domain: cfg.domain,
+        wssUrl: cfg.wssUrl,
+        enabled: true,
+      });
     }
-    return () => {
-      /* keep engine alive across renders */
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config?.username, config?.domain, config?.wssUrl, config?.password]);
+  };
 
-  const value: Ctx = {
-    supported: sipEngine.isSupported(),
+  const clearConfig = async () => {
+    if (sel) await m.removeAccount(sel.id);
+  };
+
+  const connect = async () => { if (sel) await m.connect(sel.id); };
+  const disconnect = async () => { if (sel) await m.disconnect(sel.id); };
+
+  return {
+    supported: m.supported,
     config,
-    status: sipEngine.getStatus(),
-    activeCall: sipEngine.getActiveCall(),
-    calls: sipEngine.getCalls(),
-    logs: sipEngine.getLogs(),
+    status,
+    activeCall,
+    calls,
+    logs,
     saveConfig,
     clearConfig,
     connect,
     disconnect,
-    call: (t) => sipEngine.call(t),
-    answer: (id) => sipEngine.answer(id),
-    hangup: (id) => sipEngine.hangup(id),
-    setMute: (id, m) => sipEngine.setMute(id, m),
-    setHold: (id, h) => sipEngine.setHold(id, h),
-    sendDTMF: (id, t) => sipEngine.sendDTMF(id, t),
+    call: async (t: string) => {
+      const r = await m.call(t);
+      return r.callId;
+    },
+    answer: (id: string) => m.answer(id),
+    hangup: (id?: string) => m.hangup(id),
+    setMute: (id: string, muted: boolean) => m.setMute(id, muted),
+    setHold: (id: string, hold: boolean) => m.setHold(id, hold),
+    sendDTMF: (id: string, tone: string) => m.sendDTMF(id, tone),
   };
-  return <SipEngineContext.Provider value={value}>{children}</SipEngineContext.Provider>;
-}
-
-export function useSipEngine() {
-  const c = useContext(SipEngineContext);
-  if (!c) throw new Error("useSipEngine must be used inside SipEngineProvider");
-  return c;
 }

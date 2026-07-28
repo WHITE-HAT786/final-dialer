@@ -4,8 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { useSip } from "@/src/SipContext";
-import { useSipEngine } from "@/src/sip/SipEngineContext";
+import { useMultiSip } from "@/src/sip/MultiSipContext";
 import { colors } from "@/src/theme";
 
 function fmt(sec: number) {
@@ -15,22 +14,23 @@ function fmt(sec: number) {
 }
 
 export default function CallScreen() {
-  const params = useLocalSearchParams<{ number?: string; name?: string; callId?: string }>();
+  const params = useLocalSearchParams<{ number?: string; name?: string; callId?: string; accountId?: string }>();
   const router = useRouter();
-  const { selected } = useSip();
-  const engine = useSipEngine();
+  const multi = useMultiSip();
 
   const [callId, setCallId] = useState<string | null>(params.callId || null);
+  const [ownerAccountId, setOwnerAccountId] = useState<string | null>(params.accountId || null);
   const [keypadOpen, setKeypadOpen] = useState(false);
   const [dtmf, setDtmf] = useState("");
-  // For simulation fallback when engine isn't registered
+  const [error, setError] = useState<string | null>(null);
+
+  // Simulation state (used when no real call is placed)
   const [simSeconds, setSimSeconds] = useState(0);
-  const [simState, setSimState] = useState<"dialing" | "ringing" | "connected" | "ended">("dialing");
+  const [simState, setSimState] = useState<"dialing" | "ringing" | "connected" | "ended" | "failed">("dialing");
 
   const pulse = useRef(new Animated.Value(1)).current;
   const dialingRef = useRef(false);
 
-  // Start pulse animation once
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -42,42 +42,65 @@ export default function CallScreen() {
     return () => loop.stop();
   }, [pulse]);
 
-  // If no callId was passed, place a call via the engine (or fall through to simulation).
+  // Place a call if we weren't handed a callId (e.g. from Contacts or Recent Calls).
   useEffect(() => {
     (async () => {
       if (callId || dialingRef.current) return;
       const number = params.number || "";
+      if (!number) return;
       dialingRef.current = true;
-      if (engine.status === "registered" && number) {
-        const id = await engine.call(number);
-        if (id) setCallId(id);
-      } else {
-        // Simulation fallback
+
+      const sel = multi.selectedAccount;
+      if (!sel) {
+        setSimState("failed");
+        setError("No SIP account selected — add one in SIP Accounts.");
+        return;
+      }
+      const res = await multi.call(number, sel.id);
+      if (res.error) {
+        setError(res.error);
+        // Kick off simulation as visual fallback
         const t1 = setTimeout(() => setSimState("ringing"), 900);
-        const t2 = setTimeout(() => setSimState("connected"), 2800);
+        const t2 = setTimeout(() => setSimState("failed"), 2500);
         return () => { clearTimeout(t1); clearTimeout(t2); };
       }
+      setCallId(res.callId);
+      setOwnerAccountId(res.accountId);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine.status]);
+  }, []);
 
   // Simulation timer
   useEffect(() => {
-    if (callId) return; // real engine handles duration
+    if (callId) return;
     if (simState !== "connected") return;
     const iv = setInterval(() => setSimSeconds((s) => s + 1), 1000);
     return () => clearInterval(iv);
   }, [simState, callId]);
 
-  // Pull live call from engine
-  const liveCall = useMemo(() => engine.calls.find((c) => c.id === callId) || null, [engine.calls, callId]);
+  // Find live call across engines
+  const owner = useMemo(() => {
+    if (!callId) return null;
+    return multi.findCallOwner(callId);
+  }, [callId, multi]);
+  const liveCall = useMemo(() => owner?.calls.find((c) => c.id === callId) || null, [owner, callId]);
 
-  // Derived display state
   const isReal = !!liveCall;
   const state = isReal ? liveCall!.state : simState;
   const durationSec = isReal ? liveCall!.durationSec : simSeconds;
   const muted = isReal ? liveCall!.muted : false;
   const held = isReal ? liveCall!.onHold : false;
+
+  // Latch the failure cause into error so it stays visible
+  useEffect(() => {
+    if (isReal && liveCall && liveCall.state === "failed" && liveCall.cause) {
+      setError(`Call failed: ${liveCall.cause}`);
+    }
+  }, [isReal, liveCall]);
+
+  const account = ownerAccountId
+    ? multi.accounts.find((a) => a.id === ownerAccountId)
+    : multi.selectedAccount;
 
   const number = params.number || (liveCall?.remote || "").replace(/^sip:/, "").split("@")[0] || "Unknown";
   const name = params.name || liveCall?.remoteName || "Unknown";
@@ -99,38 +122,29 @@ export default function CallScreen() {
     state === "failed" ? `Failed${liveCall?.cause ? ` (${liveCall.cause})` : ""}` :
     "Idle";
 
-  // Auto-return when ended
   useEffect(() => {
     if (["ended", "failed"].includes(state)) {
-      const t = setTimeout(() => router.back(), 1200);
+      const t = setTimeout(() => router.back(), 1600);
       return () => clearTimeout(t);
     }
   }, [state, router]);
 
   const hangup = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    if (callId) engine.hangup(callId);
-    else { setSimState("ended"); }
+    if (callId) multi.hangup(callId);
+    else setSimState("ended");
   };
-
-  const toggleMute = () => {
-    if (callId) engine.setMute(callId, !muted);
-  };
-  const toggleHold = () => {
-    if (callId) engine.setHold(callId, !held);
-  };
+  const toggleMute = () => { if (callId) multi.setMute(callId, !muted); };
+  const toggleHold = () => { if (callId) multi.setHold(callId, !held); };
   const sendDtmf = (t: string) => {
     Haptics.selectionAsync().catch(() => {});
     setDtmf((d) => (d + t).slice(-16));
-    if (callId) engine.sendDTMF(callId, t);
+    if (callId) multi.sendDTMF(callId, t);
   };
 
-  // Choose display SIP: real config if available, otherwise the UI-picker's selected mock
-  const viaName = engine.config?.displayName || selected.name;
-  const viaId = engine.config
-    ? `${engine.config.username}@${engine.config.domain}`
-    : selected.did;
-  const viaColor = engine.status === "registered" ? colors.green : selected.color;
+  const viaName = account?.displayName || account?.username || "No SIP account";
+  const viaId = account?.callerId || (account ? `${account.username}@${account.domain}` : "");
+  const viaColor = owner?.status === "registered" ? colors.green : (account?.color as string) || colors.textMuted;
 
   return (
     <SafeAreaView style={styles.wrap} edges={["top", "bottom"]}>
@@ -169,12 +183,19 @@ export default function CallScreen() {
           <MaterialCommunityIcons name="server-network" size={18} color={viaColor} />
           <View style={{ flex: 1 }}>
             <Text style={styles.viaLabel}>
-              {engine.status === "registered" ? "Calling via SIP" : "SIP not registered — using simulation"}
+              {isReal ? "Calling via SIP" : owner ? "Placing call…" : (error ? "Call not placed" : "Placing call…")}
             </Text>
             <Text style={styles.viaName} numberOfLines={1}>{viaName}</Text>
           </View>
           <Text style={styles.viaDid} numberOfLines={1}>{viaId}</Text>
         </View>
+
+        {error && (
+          <View style={styles.errorBanner} testID="call-error-banner">
+            <Ionicons name="alert-circle" size={18} color={colors.red} />
+            <Text style={styles.errorText} numberOfLines={5}>{error}</Text>
+          </View>
+        )}
 
         {keypadOpen && (
           <View style={styles.dtmfBox}>
@@ -232,10 +253,12 @@ const styles = StyleSheet.create({
   stateRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
   stateDot: { width: 8, height: 8, borderRadius: 4 },
   state: { color: colors.textMuted, fontSize: 14 },
-  viaCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 12, marginTop: 24, borderWidth: 1, borderColor: colors.border, width: "100%" },
+  viaCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 12, marginTop: 20, borderWidth: 1, borderColor: colors.border, width: "100%" },
   viaLabel: { color: colors.textMuted, fontSize: 11 },
   viaName: { color: "#fff", fontSize: 14, fontWeight: "700", marginTop: 2 },
   viaDid: { color: colors.primary, fontSize: 12, fontWeight: "600", maxWidth: 130 },
+  errorBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.redDim + "90", borderWidth: 1, borderColor: colors.red + "60", borderRadius: 12, padding: 12, marginTop: 12, width: "100%" },
+  errorText: { flex: 1, color: colors.red, fontSize: 12, fontWeight: "600" },
   dtmfBox: { marginTop: 20, width: "100%", padding: 12, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   dtmfDigits: { color: "#fff", fontSize: 22, textAlign: "center", letterSpacing: 4, minHeight: 30 },
   dtmfGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 8 },

@@ -5,7 +5,7 @@ import Screen from "@/src/components/Screen";
 import { colors } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { StatusPill } from "@/src/components/ListUI";
-import { useSip } from "@/src/SipContext";
+import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const TABS = [
@@ -24,7 +24,13 @@ export default function Billing() {
   const [data, setData] = useState<any>(null);
   const [active, setActive] = useState("invoices");
   const [sipPicker, setSipPicker] = useState(false);
-  const { selected } = useSip();
+  const { selectedAccount } = useMultiSip();
+  const selected = {
+    name: selectedAccount?.displayName || selectedAccount?.username || "No SIP Account",
+    host: selectedAccount?.wssUrl?.replace(/^wss?:\/\//, "").split("/")[0] || "",
+    did: selectedAccount?.callerId || (selectedAccount ? `${selectedAccount.username}@${selectedAccount.domain}` : ""),
+    color: (selectedAccount?.color as string) || colors.primary,
+  };
   useEffect(() => { apiGet("/billing").then(setData); }, []);
 
   return (

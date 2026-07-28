@@ -12,7 +12,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
-import { useSip } from "@/src/SipContext";
+import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 
 const KEYS = [
@@ -32,24 +32,58 @@ const KEYS = [
 
 export default function Dialer() {
   const router = useRouter();
-  const { selected } = useSip();
+  const { selectedAccount, selectedRuntime, runtimes, call } = useMultiSip();
   const [num, setNum] = useState("");
   const [sipPicker, setSipPicker] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selName = selectedAccount?.displayName || selectedAccount?.username || "No SIP account";
+  const selDid = selectedAccount?.callerId || (selectedAccount ? `${selectedAccount.username}@${selectedAccount.domain}` : "Tap to add");
+  const selHost = selectedAccount?.wssUrl || "";
+  const selColor = (() => {
+    switch (selectedRuntime?.status) {
+      case "registered": return colors.green;
+      case "connecting": return colors.yellow;
+      case "registration_failed": return colors.red;
+      default: return selectedAccount?.color || colors.textMuted;
+    }
+  })();
+  const selStatusLabel = (() => {
+    switch (selectedRuntime?.status) {
+      case "registered": return "Registered";
+      case "connecting": return "Connecting…";
+      case "registration_failed": return "Registration Failed";
+      case "unsupported": return "Unsupported";
+      case "error": return "Error";
+      case "unregistered": return "Unregistered";
+      default: return runtimes.length === 0 ? "No SIP account" : "Disconnected";
+    }
+  })();
 
   const press = (k: string) => {
     Haptics.selectionAsync().catch(() => {});
+    setError(null);
     setNum((n) => (n + k).slice(0, 20));
   };
-
   const back = () => {
     Haptics.selectionAsync().catch(() => {});
     setNum((n) => n.slice(0, -1));
   };
 
-  const startCall = () => {
-    if (!num.trim()) return;
+  const startCall = async () => {
+    setError(null);
+    if (!num.trim()) { setError("Enter a number first"); return; }
+    if (!selectedAccount) {
+      setError("No SIP account selected — add one first");
+      return;
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    router.push({ pathname: "/call", params: { number: num, name: "Unknown" } });
+    const res = await call(num, selectedAccount.id);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    router.push({ pathname: "/call", params: { number: num, name: "Unknown", callId: res.callId || "", accountId: res.accountId || "" } });
   };
 
   return (
@@ -60,20 +94,30 @@ export default function Dialer() {
         onPress={() => setSipPicker(true)}
         testID="dialer-sip-card"
       >
-        <View style={[styles.sipIcon, { backgroundColor: selected.color + "22" }]}>
-          <MaterialCommunityIcons name="server-network" size={22} color={selected.color} />
-          <View style={styles.sipCheck}>
-            <Ionicons name="checkmark" size={9} color="#fff" />
+        <View style={[styles.sipIcon, { backgroundColor: selColor + "22" }]}>
+          <MaterialCommunityIcons name="server-network" size={22} color={selColor} />
+          <View style={[styles.sipCheck, { backgroundColor: selColor }]}>
+            <Ionicons name={selectedRuntime?.status === "registered" ? "checkmark" : "swap-horizontal"} size={9} color="#fff" />
           </View>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.sipLabel}>Active SIP Account · Tap to change</Text>
-          <Text style={styles.sipName} numberOfLines={1}>{selected.name}</Text>
-          <Text style={styles.sipHost} numberOfLines={1}>{selected.host}</Text>
-          <Text style={styles.sipHost} numberOfLines={1}>{selected.did}</Text>
+          <Text style={styles.sipLabel}>{runtimes.length === 0 ? "No SIP account · Tap to add" : "Active SIP Account · Tap to switch"}</Text>
+          <Text style={styles.sipName} numberOfLines={1}>{selName}</Text>
+          <Text style={styles.sipHost} numberOfLines={1}>{selHost || "—"}</Text>
+          <Text style={[styles.sipHost, { color: selColor }]} numberOfLines={1}>{selStatusLabel}{selectedAccount && ` · ${selDid}`}</Text>
         </View>
         <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
       </TouchableOpacity>
+
+      {error && (
+        <View style={styles.errorBanner} testID="dialer-error-banner">
+          <Ionicons name="alert-circle" size={18} color={colors.red} />
+          <Text style={styles.errorText} numberOfLines={4}>{error}</Text>
+          <TouchableOpacity onPress={() => setError(null)} testID="dialer-error-close">
+            <Ionicons name="close" size={18} color={colors.red} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Tabs (Keypad/Contacts/Recents/More) */}
       <View style={styles.tabRow}>
@@ -212,6 +256,8 @@ const qaStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, backgroundColor: colors.redDim + "80", borderWidth: 1, borderColor: colors.red + "50", borderRadius: 12, marginTop: 10 },
+  errorText: { flex: 1, color: colors.red, fontSize: 12, fontWeight: "600" },
   sipCard: {
     flexDirection: "row",
     alignItems: "center",

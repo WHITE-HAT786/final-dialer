@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only end-to-end verification of the multi-account SIP feature. All 10 requested checks PASSED. Empty state (testID='sip-empty-state') renders on fresh install with both 'sip-empty-add' and 'sip-empty-add-demo'. Tapping 'sip-empty-add-demo' creates the WebDialer/568244@webdialer.depthroute.com card; status pill transitions Connecting→Registration Failed (red) and the stats strip shows Total=1 / Failed=1 as expected (server auth is disabled by design). Per-card testIDs sip-toggle-<id>, sip-edit-<id>, sip-remove-<id> all wired. 'Add' header button (testID='sip-add-top') opens the modal 'sip-form-sheet' with form-displayName, form-username, form-password, form-domain, form-wss, form-callerId, form-authUser, form-enabled, form-save. Filling and saving created a 2nd 'Backup' card and closed the sheet within ~3s. Exactly ONE 'Selected' pill at any time. sip-select-<id> moves selection; Dashboard 'Calling as' block correctly shows 'Backup' and CLID '+1 555 000 9999'. Dialer's dialer-sip-card opens sip-picker-sheet containing ONLY the two real accounts (WebDialer + Backup) — the old hardcoded telnyx/twilio/bandwidth/vonage/plivo are gone. Placing a call on a non-registered account surfaces dialer-error-banner 'Account \"WebDialer\" is not registered (registration_failed). Fix in SIP Accounts.' and does NOT navigate to /call. Removing all accounts restores the empty state. Sidebar lists 'SIP Accounts' (sidebar-item-sip); 'SIP Settings' entry and sidebar-item-settings are gone. /settings URL is unmatched and renders Expo Router's 'Unmatched Route' page (no crash). ONE regression found: the header SIP pill (testID='header-sip-pill' in Header.tsx line 89) still calls router.push('/settings'), which now dead-ends on the 404 route — needs to point to '/sip-accounts' (or be removed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Header SIP pill",
+        "issue": "Header.tsx line 89 still calls router.push('/settings') on tap of header-sip-pill. Since /settings was removed this iteration, tapping the pill on Dashboard navigates to the 'Unmatched Route' 404 page. Should route to '/sip-accounts' instead.",
+        "testID": "header-sip-pill",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_5.json"],
+  "action_items": [
+    "In /app/frontend/src/components/Header.tsx line 89, change onPress={() => router.push('/settings')} to router.push('/sip-accounts') so the header SIP pill lands on a real screen.",
+    "Optional spec alignment: the review request lists testID 'form-close' for the modal close button, but the code exposes 'sip-form-close'. Either add testID='form-close' to the close button in /app/frontend/app/sip-accounts.tsx (line 264) or update the spec — everything else matched exactly.",
+    "Note: Header.tsx status pill labels ('SIP Registered', 'SIP N/A', 'SIP Error', etc.) still reference the old single-account status vocabulary — cosmetic only, works correctly against the selectedRuntime.status."
+  ],
+  "critical_code_review_comments": [
+    "MultiSipContext.tsx correctly manages a Map<id, SipEngine> and auto-connects enabled accounts on mount; persistence via storage.secureSet is in place.",
+    "sip-accounts.tsx cleanly separates empty-state / list / form-sheet / log panel — modal Sheet uses a dedicated testID 'sip-form-sheet' and per-field testIDs form-*.",
+    "call() in MultiSipContext returns a structured error {callId, accountId, error} that the Dialer and Call screens surface as inline banners — good UX, no silent failures.",
+    "Header.tsx dead link to /settings is the only leftover from the previous single-account iteration and is user-visible."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100% of requested SIP flows; 1 unrequested regression discovered (Header pill dead link to /settings)"},
+  "seed_data_creation": "Two SIP accounts were created via UI during testing (WebDialer demo + Backup 999@example.com) then removed at the end. Accounts persist in the browser's secure storage, so a fresh session starts empty as verified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login testIDs are 'login-email' / 'login-password' / 'login-submit-button' (NOT 'login-email-input'). The bottom tab bar is hidden on stack routes like /sip-accounts — use router-based navigation (page.goto('/dashboard')) or navigate via header/sidebar rather than clicking tab-* selectors while on a stack route. dialer-number is a TextInput (input.value), not innerText, so page.evaluate innerText returns null even when digits are present — inspect input.value if needed. The header SIP pill testID='header-sip-pill' is present on Dashboard/Dialer but hidden on sip-accounts/settings-style screens.",
+  "rca_of_issue": "Header.tsx was updated in iteration 4 to add a /settings deep-link on the SIP pill, but this iteration removed the /settings route without cleaning up the Header. Reproduction: login → Dashboard → tap the small 'Reg. Failed / Registered' pill in the header → 'Unmatched Route' page. Fix: change the router.push target in /app/frontend/src/components/Header.tsx line 89 from '/settings' to '/sip-accounts'."
+}
