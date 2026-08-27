@@ -38,3 +38,11 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# Generated native projects (Expo prebuild / CNG) — regenerated, never committed
+/android
+/ios
+# This project uses yarn; ignore npm's lockfile
+package-lock.json
+# Android/iOS signing material
+*.keystore

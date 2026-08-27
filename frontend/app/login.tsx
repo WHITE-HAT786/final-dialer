@@ -21,12 +21,15 @@ import { useAuth } from "@/src/AuthContext";
 
 export default function Login() {
   const router = useRouter();
-  const { loginEmail, loginGoogleSession, user } = useAuth();
-  const [email, setEmail] = useState("demo@depthroute.com");
-  const [password, setPassword] = useState("demo1234");
+  const { loginEmail, verify2fa, loginGoogleSession, user } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 2FA: set once the password step reports a challenge.
+  const [twoFA, setTwoFA] = useState<{ challenge: string; method: string } | null>(null);
+  const [code, setCode] = useState("");
 
   useEffect(() => {
     if (user) router.replace("/(tabs)/dashboard");
@@ -79,10 +82,31 @@ export default function Login() {
     }
     setBusy(true);
     try {
-      await loginEmail(email.trim(), password);
-      router.replace("/(tabs)/dashboard");
+      const res = await loginEmail(email.trim(), password);
+      if (res.status === "2fa") {
+        setTwoFA({ challenge: res.challenge, method: res.method });
+      } else {
+        router.replace("/(tabs)/dashboard");
+      }
     } catch (e: any) {
       setErr(e.message || "Login failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onVerify2fa = async () => {
+    setErr(null);
+    if (!twoFA || !code.trim()) {
+      setErr("Enter the verification code");
+      return;
+    }
+    setBusy(true);
+    try {
+      await verify2fa(twoFA.challenge, code.trim());
+      router.replace("/(tabs)/dashboard");
+    } catch (e: any) {
+      setErr(e.message || "Verification failed");
     } finally {
       setBusy(false);
     }
@@ -181,6 +205,22 @@ export default function Login() {
               </TouchableOpacity>
             </View>
 
+            {twoFA && (
+              <View style={styles.field}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder={twoFA.method === "email" ? "Email code" : "Authenticator code"}
+                  placeholderTextColor={colors.textDim}
+                  value={code}
+                  onChangeText={setCode}
+                  keyboardType="number-pad"
+                  autoFocus
+                  testID="login-2fa-code"
+                />
+              </View>
+            )}
+
             {err && (
               <Text style={styles.error} testID="login-error">
                 {err}
@@ -189,42 +229,46 @@ export default function Login() {
 
             <TouchableOpacity
               style={[styles.primary, busy && { opacity: 0.7 }]}
-              onPress={onEmailLogin}
+              onPress={twoFA ? onVerify2fa : onEmailLogin}
               disabled={busy}
               testID="login-submit-button"
             >
               {busy ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.primaryText}>Sign In</Text>
+                <Text style={styles.primaryText}>{twoFA ? "Verify" : "Sign In"}</Text>
               )}
             </TouchableOpacity>
 
-            <View style={styles.dividerRow}>
-              <View style={styles.hair} />
-              <Text style={styles.orText}>or continue with</Text>
-              <View style={styles.hair} />
-            </View>
+            {!twoFA && (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.hair} />
+                  <Text style={styles.orText}>or continue with</Text>
+                  <View style={styles.hair} />
+                </View>
 
-            <TouchableOpacity
-              style={styles.google}
-              onPress={onGoogle}
-              disabled={busy}
-              testID="login-google-button"
-            >
-              <Image
-                source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }}
-                style={{ width: 20, height: 20 }}
-              />
-              <Text style={styles.googleText}>Continue with Google</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.google}
+                  onPress={onGoogle}
+                  disabled={busy}
+                  testID="login-google-button"
+                >
+                  <Image
+                    source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }}
+                    style={{ width: 20, height: 20 }}
+                  />
+                  <Text style={styles.googleText}>Continue with Google</Text>
+                </TouchableOpacity>
 
-            <View style={styles.demoBox}>
-              <Ionicons name="information-circle" size={16} color={colors.primary} />
-              <Text style={styles.demoText}>
-                Demo: demo@depthroute.com / demo1234
-              </Text>
-            </View>
+                <View style={styles.demoBox}>
+                  <Ionicons name="information-circle" size={16} color={colors.primary} />
+                  <Text style={styles.demoText}>
+                    Sign in with your Depth Route account
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
 
           <Text style={styles.footer}>v2.5.0 • © Depth Route</Text>

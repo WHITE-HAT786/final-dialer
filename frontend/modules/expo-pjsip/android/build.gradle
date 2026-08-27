@@ -1,0 +1,36 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+group = 'expo.modules.pjsip'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.pjsip"
+  compileSdkVersion safeExtGet("compileSdkVersion", 34)
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 34)
+  }
+  // pjsua2.jar (Java bindings) + the per-ABI libpjsua2.so live in libs/ and
+  // jniLibs/. See modules/expo-pjsip/PJSIP_SETUP.md for how to build/obtain them.
+  sourceSets {
+    main {
+      jniLibs.srcDirs = ['src/main/jniLibs']
+    }
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  // PJSIP Java bindings (pjsua2). Provided as a local jar produced by the PJSIP
+  // build (make in pjsip-apps/src/swig with SWIG java target).
+  implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+def safeExtGet(prop, fallback) {
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}

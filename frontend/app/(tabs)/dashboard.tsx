@@ -13,6 +13,7 @@ import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { useAuth } from "@/src/AuthContext";
+import { useBalance } from "@/src/hooks/useBalance";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 
@@ -38,6 +39,7 @@ const statIcon = (icon: string) => {
 export default function Dashboard() {
   const router = useRouter();
   const { user } = useAuth();
+  const { state: balance } = useBalance();   // PORTAL-authoritative, honest-degrading
   const { selectedAccount, selectedRuntime, runtimes } = useMultiSip();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -165,9 +167,22 @@ export default function Dashboard() {
             <Ionicons name="wallet" size={16} color={colors.green} />
           </View>
           <Text style={styles.tinyLabel}>Account Balance</Text>
-          <Text style={styles.balanceValue} numberOfLines={1} adjustsFontSizeToFit>
-            ${data.balance.amount.toFixed(2)}
-          </Text>
+          {/* PORTAL balance only. loading -> placeholder, ok -> amount,
+              unavailable -> a distinct message that is NEVER $0.00. */}
+          {balance.status === "loading" ? (
+            <Text style={styles.balanceValue} numberOfLines={1}>…</Text>
+          ) : balance.status === "ok" ? (
+            <Text style={styles.balanceValue} numberOfLines={1} adjustsFontSizeToFit>
+              ${Number(balance.balance).toFixed(2)}
+            </Text>
+          ) : (
+            <Text
+              style={[styles.balanceValue, { fontSize: 15, color: colors.textMuted }]}
+              numberOfLines={2}
+            >
+              Balance unavailable
+            </Text>
+          )}
           <Text style={styles.moneySub}>Tap to recharge</Text>
         </TouchableOpacity>
         <TouchableOpacity

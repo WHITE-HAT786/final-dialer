@@ -37,7 +37,8 @@
         }
       ],
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "./modules/expo-pjsip/app.plugin.js"
     ],
     "experiments": {
       "typedRoutes": true

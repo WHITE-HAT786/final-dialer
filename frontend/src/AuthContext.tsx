@@ -1,20 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { storage } from "@/src/utils/storage";
-import { apiGet, apiPost, AUTH_KEY } from "@/src/api";
+import { authApi, AUTH_KEY } from "@/src/api";
+import { AuthUser, LoginResult } from "@/src/types";
 
-export type AuthUser = {
-  user_id: string;
-  name: string;
-  email: string;
-  picture?: string | null;
-  role: string;
-  created_at: string;
-};
+export type { AuthUser } from "@/src/types";
 
 type AuthCtx = {
   user: AuthUser | null;
   loading: boolean;
-  loginEmail: (email: string, password: string) => Promise<void>;
+  /** Password step. Signs in on success, or returns a 2FA challenge to answer. */
+  loginEmail: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
+  /** Complete a 2FA login with the challenge from loginEmail + the user's code. */
+  verify2fa: (challenge: string, code: string) => Promise<void>;
   registerEmail: (name: string, email: string, password: string) => Promise<void>;
   loginGoogleSession: (sessionId: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -35,63 +32,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = async () => {
     try {
       const token = await storage.secureGet<string>(AUTH_KEY, "");
-      if (!token) {
-        setUser(null);
-        return;
-      }
-      const me = await apiGet<AuthUser>("/auth/me");
-      setUser(me);
+      if (!token) { setUser(null); return; }
+      setUser(await authApi.me());
     } catch {
+      // Token invalid/expired/revoked -> drop it and show the login screen.
       await storage.secureRemove(AUTH_KEY);
       setUser(null);
     }
   };
 
   useEffect(() => {
-    (async () => {
-      await refresh();
-      setLoading(false);
-    })();
+    (async () => { await refresh(); setLoading(false); })();
   }, []);
 
-  const loginEmail = async (email: string, password: string) => {
-    const res = await apiPost<{ token: string; user: AuthUser }>(
-      "/auth/login",
-      { email, password },
-      false,
-    );
-    await persist(res.token, res.user);
+  const loginEmail = async (usernameOrEmail: string, password: string): Promise<LoginResult> => {
+    const { result, token } = await authApi.login(usernameOrEmail, password);
+    if (result.status === "ok" && token) await persist(token, result.user);
+    return result;
   };
 
-  const registerEmail = async (name: string, email: string, password: string) => {
-    const res = await apiPost<{ token: string; user: AuthUser }>(
-      "/auth/register",
-      { name, email, password },
-      false,
-    );
-    await persist(res.token, res.user);
+  const verify2fa = async (challenge: string, code: string) => {
+    const { token, user: u } = await authApi.verify2fa(challenge, code);
+    await persist(token, u);
   };
 
-  const loginGoogleSession = async (session_id: string) => {
-    const res = await apiPost<{ token: string; user: AuthUser }>(
-      "/auth/google/session",
-      { session_id },
-      false,
-    );
-    await persist(res.token, res.user);
+  // Not part of the customer softphone flow — surfaced honestly rather than faked.
+  const registerEmail = async () => {
+    throw new Error("Accounts are provisioned by your administrator.");
+  };
+  const loginGoogleSession = async () => {
+    throw new Error("Google sign-in isn't available in this build yet.");
   };
 
   const logout = async () => {
-    try {
-      await apiPost("/auth/logout", {});
-    } catch {}
+    try { await authApi.logout(); } catch { /* revoke is best-effort */ }
     await storage.secureRemove(AUTH_KEY);
     setUser(null);
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, loginEmail, registerEmail, loginGoogleSession, logout, refresh }}
+      value={{ user, loading, loginEmail, verify2fa, registerEmail, loginGoogleSession, logout, refresh }}
     >
       {children}
     </AuthContext.Provider>

@@ -3,11 +3,14 @@
 // but everything is now routed through the multi-account engine.
 import React, { ReactNode } from "react";
 import { MultiSipProvider, useMultiSip, DEFAULT_ACCOUNT } from "./MultiSipContext";
-import type { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipEngine";
+import type { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipTypes";
 
 export const DEFAULT_SIP_CONFIG: SipConfig = {
   ...DEFAULT_ACCOUNT,
   registerExpires: 300,
+  wssUrl: DEFAULT_ACCOUNT.wssUrl ?? "",
+  // SipConfig's native transport excludes "WSS"; the empty default is UDP.
+  transport: DEFAULT_ACCOUNT.transport === "WSS" ? "UDP" : DEFAULT_ACCOUNT.transport,
 };
 
 export function SipEngineProvider({ children }: { children: ReactNode }) {
@@ -32,7 +35,7 @@ export function useSipEngine() {
     username: sel.username,
     password: sel.password,
     domain: sel.domain,
-    wssUrl: sel.wssUrl,
+    wssUrl: sel.wssUrl ?? "",
     registerExpires: 300,
   } : null;
 

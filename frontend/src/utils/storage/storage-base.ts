@@ -2,7 +2,16 @@
 // Concrete implementations live in index.ts (native) and index.web.ts (web).
 
 export type StorageItemKey = string;
-export type StorageItemValue = string | number | boolean | null;
+// JSON-serializable values. The storage layer JSON-stringifies, so objects and
+// arrays are valid (the previous primitives-only type rejected the app's own
+// persisted MohPrefs / SipAccount[] — a pre-existing type bug).
+export type StorageItemValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: StorageItemValue }
+  | StorageItemValue[];
 
 // Helper for subclasses to enforce that they don't declare methods beyond
 // StorageBase. Use as: type _ = AssertNoExtras<Exclude<keyof Storage, keyof StorageBase>>;
