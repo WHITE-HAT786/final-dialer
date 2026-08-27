@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
 
 type Props = {
   title: string;
@@ -38,6 +38,7 @@ export default function Screen({
 }: Props) {
   const [drawer, setDrawer] = useState(false);
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   const content = (
     <View style={contentPadding ? { paddingHorizontal: 16, paddingBottom: tabBarSpace + insets.bottom } : { paddingBottom: tabBarSpace + insets.bottom }}>
@@ -46,7 +47,7 @@ export default function Screen({
   );
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { backgroundColor: colors.bg }]}>
       <Header
         title={title}
         onMenu={() => setDrawer(true)}
@@ -80,6 +81,7 @@ export default function Screen({
   );
 }
 
+// Only the layout is static here; the page colour follows the active theme.
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg },
+  wrap: { flex: 1 },
 });

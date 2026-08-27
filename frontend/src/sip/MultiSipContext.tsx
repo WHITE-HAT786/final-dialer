@@ -155,8 +155,17 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
   // Load persisted accounts & selection on mount
   useEffect(() => {
     (async () => {
-      const list = (await storage.secureGet<SipAccount[]>(ACCOUNTS_KEY, [])) || [];
-      const sel = (await storage.getItem<string>(SELECTED_KEY, "")) || (list[0]?.id ?? null);
+      // MANAGED-IDENTITY ONLY (Phase 14). The customer's calling identity is
+      // provisioned by WebDialer and resolved from the authenticated token; the
+      // app no longer keeps manually-entered SIP accounts. Any left over from an
+      // earlier build is purged here so a stale external SIP target can never
+      // register from this device.
+      const stored = (await storage.secureGet<SipAccount[]>(ACCOUNTS_KEY, [])) || [];
+      if (stored.length > 0) {
+        try { await storage.secureSet(ACCOUNTS_KEY, []); } catch { /* best effort */ }
+      }
+      const list: SipAccount[] = [];
+      const sel = (await storage.getItem<string>(SELECTED_KEY, "")) || null;
       setAccounts(list);
       setSelectedId(sel);
       // Auto-connect enabled accounts (only if browser-compatible transport)

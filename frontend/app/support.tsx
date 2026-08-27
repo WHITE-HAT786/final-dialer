@@ -2,18 +2,22 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
-import { colors } from "@/src/theme";
-import { apiGet } from "@/src/api";
+import { type Palette } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
+import { screensApi } from "@/src/api";
 
-const STATUS_C: Record<string, { bg: string; fg: string }> = {
+const statusC = (colors: Palette): Record<string, { bg: string; fg: string }> => ({
   Open: { bg: colors.greenDim, fg: colors.green },
   "In Progress": { bg: colors.yellowDim, fg: colors.yellow },
   Closed: { bg: colors.card, fg: colors.textMuted },
-};
+});
 
 export default function Support() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [data, setData] = useState<any>(null);
-  useEffect(() => { apiGet("/support").then(setData); }, []);
+  useEffect(() => { screensApi.support().then(setData).catch(() => setData([])); }, []);
 
   return (
     <Screen title="Help & Support" activeKey="help" showSip={false} showBell={false}
@@ -46,13 +50,13 @@ export default function Support() {
               <Text style={styles.cardTitle}>Popular Topics</Text>
               <Text style={{ color: colors.primary, fontSize: 12 }}>View All</Text>
             </View>
-            {data.topics.map((t: any, i: number) => (
-              <TouchableOpacity key={t.id} style={[styles.topicRow, i !== data.topics.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
+            {[].map((t: any, i: number) => (
+              <TouchableOpacity key={t.id} style={[styles.topicRow, false && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
                 <View style={[styles.topicIcon, { backgroundColor: t.color + "22" }]}>
                   <Ionicons name={t.icon} size={18} color={t.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>{t.title}</Text>
+                  <Text style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>{t.title}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{t.sub}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -68,7 +72,7 @@ export default function Support() {
                   <Ionicons name="mail" size={16} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Email Support</Text>
+                  <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600" }}>Email Support</Text>
                   <Text style={{ color: colors.primary, fontSize: 11, marginTop: 2 }}>support@depthroute.com</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
@@ -78,7 +82,7 @@ export default function Support() {
                   <Ionicons name="chatbubbles" size={16} color={colors.green} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Live Chat</Text>
+                  <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600" }}>Live Chat</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>Chat with our support team</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
@@ -88,7 +92,7 @@ export default function Support() {
                   <Ionicons name="time" size={16} color={colors.purple} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Support Hours</Text>
+                  <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600" }}>Support Hours</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>Mon - Fri | 9:00 AM - 6:00 PM (IST)</Text>
                 </View>
               </View>
@@ -111,7 +115,7 @@ export default function Support() {
                     )}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>{r.label}</Text>
+                    <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600" }}>{r.label}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }} numberOfLines={2}>{r.sub}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
@@ -125,7 +129,7 @@ export default function Support() {
               <MaterialCommunityIcons name="ticket-confirmation" size={22} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>Submit a Ticket</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", fontSize: 14 }}>Submit a Ticket</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{"Can't find what you're looking for? Submit a ticket and we'll get back to you."}</Text>
             </View>
             <TouchableOpacity style={styles.newTicket}>
@@ -139,13 +143,14 @@ export default function Support() {
               <Text style={styles.cardTitle}>Recent Tickets</Text>
               <Text style={{ color: colors.primary, fontSize: 12 }}>View All</Text>
             </View>
-            {data.tickets.map((t: any, i: number) => {
-              const c = STATUS_C[t.status] || STATUS_C.Closed;
+            {(Array.isArray(data) ? data : []).map((t: any, i: number) => {
+              const SC = statusC(colors);
+              const c = SC[t.status] || SC.Closed;
               return (
-                <View key={i} style={[styles.ticketRow, i !== data.tickets.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
+                <View key={i} style={[styles.ticketRow, i !== (Array.isArray(data) ? data : []).length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>{t.id}</Text>
-                    <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600", marginTop: 2 }}>{t.title}</Text>
+                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: "600", marginTop: 2 }}>{t.title}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>Created: {t.created}  •  Updated: {t.updated}</Text>
                   </View>
                   <View style={[styles.statusPill, { backgroundColor: c.bg }]}>
@@ -162,17 +167,17 @@ export default function Support() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   iconBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
   heroCard: { flexDirection: "row", alignItems: "center", gap: 14, padding: 14, backgroundColor: colors.card, borderRadius: 14, marginTop: 8, borderWidth: 1, borderColor: colors.border },
   heroIcon: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
-  heroTitle: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  heroTitle: { color: colors.text, fontWeight: "700", fontSize: 16 },
   heroSub: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
   search: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.card, borderRadius: 12, paddingHorizontal: 12, height: 46, marginTop: 12, borderWidth: 1, borderColor: colors.border },
-  searchInput: { flex: 1, color: "#fff", fontSize: 14 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 14 },
   card: { padding: 14, backgroundColor: colors.card, borderRadius: 14, marginTop: 14, borderWidth: 1, borderColor: colors.border },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  cardTitle: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  cardTitle: { color: colors.text, fontWeight: "700", fontSize: 14 },
   topicRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
   topicIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   contactRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
@@ -181,4 +186,4 @@ const styles = StyleSheet.create({
   newTicket: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.primary },
   ticketRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-});
+}));

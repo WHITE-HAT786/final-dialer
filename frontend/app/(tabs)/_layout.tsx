@@ -1,9 +1,14 @@
-import React from "react";
+// Bottom tab bar — the chrome strip from every DepthRoute App v2 frame.
+//
+// It sits on `bgElev` rather than the page background so it reads as chrome
+// above the content, and it follows the active theme at runtime.
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { Tabs, useRouter, useSegments } from "expo-router";
+import { Tabs } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors } from "@/src/theme";
+import { type Palette } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
 
 const TABS: {
   name: string;
@@ -33,6 +38,8 @@ export default function TabsLayout() {
 
 function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View
       style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}
@@ -49,11 +56,13 @@ function CustomTabBar({ state, navigation }: any) {
             onPress={() => navigation.navigate(route.name)}
             style={styles.tab}
             testID={`tab-${config.name}`}
+            accessibilityRole="button"
+            accessibilityState={focused ? { selected: true } : undefined}
           >
             {config.family === "mc" ? (
-              <MaterialCommunityIcons name={config.icon as any} size={22} color={color} />
+              <MaterialCommunityIcons name={config.icon as any} size={21} color={color} />
             ) : (
-              <Ionicons name={config.icon as any} size={22} color={color} />
+              <Ionicons name={config.icon as any} size={21} color={color} />
             )}
             <Text style={[styles.tabLabel, { color }]}>{config.label}</Text>
           </TouchableOpacity>
@@ -63,20 +72,22 @@ function CustomTabBar({ state, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  bar: {
-    flexDirection: "row",
-    backgroundColor: colors.bgAlt,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 8,
-  },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 4,
-  },
-  tabLabel: { fontSize: 11, fontWeight: "600" },
-});
+function makeStyles(c: Palette) {
+  return StyleSheet.create({
+    bar: {
+      flexDirection: "row",
+      backgroundColor: c.bgElev,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      paddingTop: 8,
+    },
+    tab: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+      paddingVertical: 3,
+    },
+    tabLabel: { fontSize: 10.5, fontWeight: "600" },
+  });
+}

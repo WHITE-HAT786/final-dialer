@@ -3,7 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-nati
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Screen from "@/src/components/Screen";
-import { colors, spacing } from "@/src/theme";
+import { spacing, type Palette } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
 import { useAuth } from "@/src/AuthContext";
 
 type Row = {
@@ -17,12 +19,12 @@ type Row = {
   badge?: string;
 };
 
-const SECTIONS: { title: string; items: Row[] }[] = [
+const sections = (colors: Palette): { title: string; items: Row[] }[] => [
   {
     title: "COMMUNICATION",
     items: [
-      { key: "voicemails", label: "Voicemails", icon: "voicemail", family: "mc", route: "/voicemails", color: colors.purple, bg: colors.purpleDim, badge: "5" },
-      { key: "sms", label: "SMS", icon: "chatbubble", route: "/sms", color: colors.primary, bg: colors.primaryDim, badge: "New" },
+      { key: "voicemails", label: "Voicemails", icon: "voicemail", family: "mc", route: "/voicemails", color: colors.purple, bg: colors.purpleDim },
+      { key: "sms", label: "SMS", icon: "chatbubble", route: "/sms", color: colors.primary, bg: colors.primaryDim },
       { key: "recordings", label: "Recordings", icon: "mic", route: "/recordings", color: colors.teal, bg: colors.tealDim },
     ],
   },
@@ -33,7 +35,8 @@ const SECTIONS: { title: string; items: Row[] }[] = [
       { key: "moh", label: "Music on Hold", icon: "music-note-eighth", family: "mc", route: "/moh-settings", color: colors.pink, bg: colors.purpleDim },
       { key: "extensions", label: "Extensions", icon: "people", route: "/extensions", color: colors.purple, bg: colors.purpleDim },
       { key: "numbers", label: "Numbers", icon: "call-outline", route: "/numbers", color: colors.primary, bg: colors.primaryDim },
-      { key: "ivr", label: "IVR", icon: "sitemap", family: "mc", route: "/ivr", color: colors.orange, bg: colors.orangeDim },
+      { key: "recharge", label: "Recharge", icon: "wallet-plus-outline", family: "mc", route: "/recharge", color: colors.green, bg: colors.greenDim },
+      { key: "audio-library", label: "Audio Library", icon: "music-box-multiple", family: "mc", route: "/audio-library", color: colors.orange, bg: colors.orangeDim },
       { key: "plans", label: "Plans", icon: "ribbon", route: "/plans", color: colors.teal, bg: colors.tealDim },
       { key: "billing", label: "Billing", icon: "wallet", route: "/billing", color: colors.yellow, bg: colors.yellowDim },
       { key: "reports", label: "Reports", icon: "bar-chart", route: "/reports", color: colors.pink, bg: colors.purpleDim },
@@ -43,13 +46,15 @@ const SECTIONS: { title: string; items: Row[] }[] = [
     title: "ACCOUNT",
     items: [
       { key: "profile", label: "User Profile", icon: "person", route: "/profile", color: colors.primary, bg: colors.primaryDim },
-      { key: "notifications", label: "Notifications", icon: "notifications", route: "/notifications", color: colors.red, bg: colors.redDim, badge: "3" },
+      { key: "notifications", label: "Notifications", icon: "notifications", route: "/notifications", color: colors.red, bg: colors.redDim },
       { key: "support", label: "Help & Support", icon: "help-circle", route: "/support", color: colors.green, bg: colors.greenDim },
     ],
   },
 ];
 
 export default function More() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const router = useRouter();
   const { user, logout } = useAuth();
 
@@ -92,7 +97,7 @@ export default function More() {
         <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {SECTIONS.map((sec) => (
+      {sections(colors).map((sec) => (
         <View key={sec.title} style={{ marginTop: spacing.lg }}>
           <Text style={styles.sectionTitle}>{sec.title}</Text>
           <View style={styles.sectionCard}>
@@ -136,7 +141,7 @@ export default function More() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -152,12 +157,12 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.primaryDim,
+    backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { color: "#fff", fontSize: 20, fontWeight: "700" },
-  profileName: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  avatarText: { color: colors.primary, fontSize: 20, fontWeight: "700" },
+  profileName: { color: colors.text, fontSize: 16, fontWeight: "700" },
   profileEmail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   badgeRow: { flexDirection: "row", gap: 6, marginTop: 6 },
   rolePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
@@ -190,14 +195,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  rowLabel: { flex: 1, color: "#fff", fontSize: 15 },
+  rowLabel: { flex: 1, color: colors.text, fontSize: 15 },
   rowBadge: {
     backgroundColor: colors.red,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
   },
-  rowBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  rowBadgeText: { color: colors.onPrimary, fontSize: 10, fontWeight: "700" },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -211,4 +216,4 @@ const styles = StyleSheet.create({
     borderColor: colors.red + "40",
   },
   version: { textAlign: "center", color: colors.textDim, fontSize: 11, marginTop: 16 },
-});
+}));

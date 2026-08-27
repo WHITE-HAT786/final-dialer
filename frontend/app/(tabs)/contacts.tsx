@@ -1,3 +1,9 @@
+// Contacts — implements the "Contacts" frame of DepthRoute App v2.
+//
+// Design changes: the search sits on the `input` fill at 46px beside a square
+// 46px primary action rather than a wide labelled button; the filters become
+// compact 32px pills instead of large icon cards; and favourite is a mark
+// beside the name rather than a badge clipped to the avatar.
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -8,86 +14,79 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Screen from "@/src/components/Screen";
-import { colors, spacing } from "@/src/theme";
-import { apiGet } from "@/src/api";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
+import { screensApi } from "@/src/api";
 
 const ALPHABET = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export default function Contacts() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [data, setData] = useState<any>(null);
   const [q, setQ] = useState("");
   const router = useRouter();
 
   useEffect(() => {
-    apiGet("/contacts").then(setData).catch(() => {});
+    screensApi.contacts().then(setData).catch(() => setData([]));
   }, []);
 
   const grouped = useMemo(() => {
     if (!data) return {};
-    const filtered = data.items.filter((c: any) =>
-      c.name.toLowerCase().includes(q.toLowerCase()) || c.phone.includes(q),
+    const filtered = (Array.isArray(data) ? data : []).filter((c: any) =>
+      String(c.name ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      String(c.phone ?? "").includes(q),
     );
     const g: Record<string, any[]> = {};
     filtered.forEach((c: any) => {
-      const l = c.name[0].toUpperCase();
+      const l = String(c.name ?? "#").charAt(0).toUpperCase() || "#";
       if (!g[l]) g[l] = [];
       g[l].push(c);
     });
     return g;
   }, [data, q]);
 
+  const all = Array.isArray(data) ? data : [];
+
   return (
     <Screen title="Contacts" activeKey="contacts" contentPadding={false}>
       <View style={{ paddingHorizontal: 16 }}>
         {/* Search + Add */}
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+        <View style={styles.searchRow}>
           <View style={styles.search} testID="contacts-search">
-            <Ionicons name="search" size={18} color={colors.textMuted} />
+            <Ionicons name="search" size={17} color={colors.textMuted} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search contacts..."
+              placeholder="Search name or number"
               placeholderTextColor={colors.textDim}
               value={q}
               onChangeText={setQ}
             />
-            <Ionicons name="mic-outline" size={18} color={colors.textMuted} />
           </View>
-          <TouchableOpacity style={styles.addBtn} testID="contacts-add">
-            <Ionicons name="person-add" size={16} color="#fff" />
-            <Text style={styles.addText}>Add Contact</Text>
+          <TouchableOpacity
+            style={styles.addBtn}
+            testID="contacts-add"
+            accessibilityRole="button"
+            accessibilityLabel="Add contact"
+          >
+            <Ionicons name="person-add" size={19} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
 
-        {/* Filter chips */}
+        {/* Filter pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 10, paddingVertical: spacing.md }}
+          contentContainerStyle={styles.pillScroll}
         >
-          <FilterChip
-            icon="person"
-            color={colors.green}
-            label="All Contacts"
-            value={data?.stats.all}
-          />
-          <FilterChip
-            icon="star"
-            color={colors.yellow}
-            label="Favorites"
-            value={data?.stats.favorites}
-            mci
-          />
-          <FilterChip
-            icon="people"
-            color={colors.primary}
-            label="Groups"
-            value={data?.stats.groups}
-          />
-          <FilterChip icon="download-outline" color={colors.purple} label="Import" />
-          <FilterChip icon="cloud-upload-outline" color={colors.teal} label="Export" />
+          <FilterChip color={colors.green} label="All Contacts" value={all.length} />
+          <FilterChip color={colors.yellow} label="Favorites" value={all.filter((c: any) => c.favorite).length} />
+          <FilterChip color={colors.primary} label="Groups" />
+          <FilterChip color={colors.purple} label="Import" />
+          <FilterChip color={colors.teal} label="Export" />
         </ScrollView>
       </View>
 
@@ -97,7 +96,7 @@ export default function Contacts() {
         </View>
       ) : (
         <View style={{ flexDirection: "row", flex: 1 }}>
-          <View style={{ flex: 1, paddingLeft: 16 }}>
+          <View style={{ flex: 1, minWidth: 0, paddingLeft: 16 }}>
             {Object.keys(grouped)
               .sort()
               .map((letter) => (
@@ -105,33 +104,33 @@ export default function Contacts() {
                   <Text style={styles.sectionHeader}>{letter}</Text>
                   {grouped[letter].map((c: any) => (
                     <View key={c.id} style={styles.contactRow} testID={`contact-${c.id}`}>
-                      <View style={[styles.avatarSm, { backgroundColor: c.avatar_color + "30" }]}>
-                        <Text style={{ color: c.avatar_color, fontWeight: "700", fontSize: 13 }}>
+                      <View style={[styles.avatarSm, { backgroundColor: c.avatar_color + "26" }]}>
+                        <Text style={[styles.avatarText, { color: c.avatar_color }]}>
                           {c.name
                             .split(" ")
                             .map((s: string) => s[0])
                             .slice(0, 2)
                             .join("")}
                         </Text>
-                        {c.favorite && (
-                          <View style={styles.favBadge}>
-                            <Ionicons name="star" size={9} color="#fff" />
-                          </View>
-                        )}
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.contactName}>{c.name}</Text>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={styles.nameRow}>
+                          <Text style={styles.contactName} numberOfLines={1}>{c.name}</Text>
+                          {c.favorite && <Ionicons name="star" size={11} color={colors.yellow} />}
+                        </View>
                         <Text style={styles.contactPhone}>{c.phone}</Text>
                       </View>
                       <TouchableOpacity
-                        style={[styles.callBtn, { backgroundColor: colors.greenDim }]}
+                        style={styles.callBtn}
                         onPress={() => router.push({ pathname: "/call", params: { number: c.phone, name: c.name } })}
                         testID={`contact-call-${c.id}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Call ${c.name}`}
                       >
-                        <Ionicons name="call" size={18} color={colors.green} />
+                        <Ionicons name="call" size={16} color={colors.green} />
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.moreBtn}>
-                        <Ionicons name="ellipsis-vertical" size={16} color={colors.textMuted} />
+                        <Ionicons name="ellipsis-vertical" size={17} color={colors.textDim} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -143,10 +142,7 @@ export default function Contacts() {
             {ALPHABET.map((l) => (
               <Text
                 key={l}
-                style={[
-                  styles.alphaLetter,
-                  grouped[l] ? { color: colors.primary } : undefined,
-                ]}
+                style={[styles.alphaLetter, grouped[l] ? { color: colors.primary } : undefined]}
               >
                 {l}
               </Text>
@@ -158,126 +154,102 @@ export default function Contacts() {
   );
 }
 
-function FilterChip({ icon, color, label, value, mci }: any) {
+function FilterChip({ color, label, value }: { color: string; label: string; value?: number }) {
+  const filterStyles = useFilterStyles();
   return (
-    <View style={filterStyles.chip} testID={`contacts-filter-${label}`}>
-      <View style={[filterStyles.icon, { backgroundColor: color + "20" }]}>
-        {mci ? (
-          <MaterialCommunityIcons name={icon} size={18} color={color} />
-        ) : (
-          <Ionicons name={icon} size={18} color={color} />
-        )}
-      </View>
-      <Text style={filterStyles.label}>{label}</Text>
-      {value !== undefined && (
-        <Text style={[filterStyles.value, { color }]}>{value}</Text>
-      )}
+    <View
+      style={[filterStyles.chip, { backgroundColor: color + "1A", borderColor: color + "40" }]}
+      testID={`contacts-filter-${label}`}
+    >
+      <Text style={[filterStyles.label, { color }]}>{label}</Text>
+      {value !== undefined && <Text style={[filterStyles.value, { color }]}>{value}</Text>}
     </View>
   );
 }
 
-const filterStyles = StyleSheet.create({
+const useFilterStyles = makeThemedStyles(() => StyleSheet.create({
   chip: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    minWidth: 90,
+    gap: 7,
+    height: 32,
+    paddingHorizontal: 11,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: colors.border,
   },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  label: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  value: { fontSize: 13, fontWeight: "700", marginTop: 2 },
-});
+  label: { fontSize: 12.5, fontWeight: "600" },
+  value: { fontSize: 11.5, fontWeight: "700" },
+}));
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
+  searchRow: { flexDirection: "row", gap: 8, marginTop: 12 },
   search: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    gap: 9,
+    backgroundColor: colors.input,
+    borderRadius: 10,
+    paddingHorizontal: 13,
+    height: 46,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  searchInput: { flex: 1, color: "#fff", fontSize: 14 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 14 },
   addBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    width: 46,
+    height: 46,
+    borderRadius: 10,
     backgroundColor: colors.primary,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  addText: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  sectionHeader: { color: colors.textMuted, fontSize: 13, marginTop: 12, marginBottom: 8 },
+
+  pillScroll: { gap: 7, paddingTop: 14, paddingBottom: 2, paddingRight: 8 },
+
+  sectionHeader: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    marginTop: 16,
+    marginBottom: 6,
+  },
   contactRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSoft,
   },
   avatarSm: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  favBadge: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.yellow,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  contactName: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  contactPhone: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  callBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-  moreBtn: {
+  avatarText: { fontWeight: "700", fontSize: 13 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  contactName: { color: colors.text, fontSize: 14.5, fontWeight: "600", flexShrink: 1 },
+  contactPhone: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  callBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.card,
+    borderRadius: 10,
+    backgroundColor: colors.greenSoft,
     alignItems: "center",
     justifyContent: "center",
   },
+  moreBtn: { width: 24, alignItems: "center", justifyContent: "center" },
   alphaCol: {
-    width: 20,
+    width: 22,
     alignItems: "center",
-    paddingVertical: 12,
-    paddingRight: 4,
+    paddingTop: 20,
+    paddingBottom: 12,
+    paddingRight: 6,
+    gap: 2,
   },
-  alphaLetter: {
-    color: colors.textDim,
-    fontSize: 10,
-    fontWeight: "600",
-    marginVertical: 1,
-  },
-});
+  alphaLetter: { color: colors.textDim, fontSize: 9.5, fontWeight: "600" },
+}));

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors } from "@/src/theme";
+import { cardShadow, type Palette } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
 
 type Stat = {
   label: string;
@@ -15,6 +16,8 @@ type Stat = {
 };
 
 export default function StatsRow({ stats, horizontal = true }: { stats: Stat[]; horizontal?: boolean }) {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const Wrap = horizontal ? ScrollView : View;
   const wrapProps: any = horizontal
     ? { horizontal: true, showsHorizontalScrollIndicator: false, contentContainerStyle: { gap: 10, paddingRight: 8 } }
@@ -48,23 +51,27 @@ export default function StatsRow({ stats, horizontal = true }: { stats: Stat[]; 
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    padding: 12,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 140,
-  },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
-  value: { color: "#fff", fontSize: 22, fontWeight: "700", marginTop: 2 },
-  sub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-});
+function makeStyles(c: Palette, dark: boolean) {
+  const lift = cardShadow(dark);
+  return StyleSheet.create({
+    card: {
+      padding: 12,
+      backgroundColor: c.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      minWidth: 140,
+      ...(lift ?? null),
+    },
+    icon: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    label: { color: c.textMuted, fontSize: 12, marginTop: 8 },
+    value: { color: c.text, fontSize: 21, fontWeight: "700", letterSpacing: -0.4, marginTop: 2 },
+    sub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+  });
+}

@@ -2,17 +2,20 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
-import { colors } from "@/src/theme";
-import { apiGet } from "@/src/api";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
+import { screensApi } from "@/src/api";
 
 const TABS = ["Compose", "History", "Templates", "Schedule"];
 
 export default function SMS() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [data, setData] = useState<any>(null);
   const [active, setActive] = useState("Compose");
   const [to, setTo] = useState("");
   const [msg, setMsg] = useState("");
-  useEffect(() => { apiGet("/sms").then(setData); }, []);
+  useEffect(() => { screensApi.sms().then(setData).catch(() => setData([])); }, []);
 
   return (
     <Screen title="SMS" activeKey="sms" showSip={false}>
@@ -24,7 +27,7 @@ export default function SMS() {
                 <Ionicons name="chatbubble" size={16} color={colors.primary} />
               </View>
               <Text style={styles.statLabel}>Total Sent</Text>
-              <Text style={styles.statValue}>{data.stats.total_sent.toLocaleString()}</Text>
+              <Text style={styles.statValue}>{(Array.isArray(data) ? data : []).length.toLocaleString()}</Text>
               <Text style={styles.statSub}>This Month</Text>
             </View>
             <View style={styles.statCard}>
@@ -32,15 +35,15 @@ export default function SMS() {
                 <Ionicons name="checkmark-circle" size={16} color={colors.green} />
               </View>
               <Text style={styles.statLabel}>Delivered</Text>
-              <Text style={styles.statValue}>{data.stats.delivered.toLocaleString()}</Text>
-              <Text style={[styles.statSub, { color: colors.green }]}>{data.stats.delivery_rate}% Delivery Rate</Text>
+              <Text style={styles.statValue}>{"—"}</Text>
+              <Text style={[styles.statSub, { color: colors.green }]}>Delivery rate unavailable</Text>
             </View>
             <View style={styles.statCard}>
               <View style={[styles.icon, { backgroundColor: colors.purpleDim }]}>
                 <Ionicons name="wallet" size={16} color={colors.purple} />
               </View>
               <Text style={styles.statLabel}>SMS Balance</Text>
-              <Text style={styles.statValue}>{data.stats.sms_balance.toLocaleString()}</Text>
+              <Text style={styles.statValue}>{"—"}</Text>
               <Text style={[styles.statSub, { color: colors.purple }]}>Credits</Text>
             </View>
           </View>
@@ -74,7 +77,7 @@ export default function SMS() {
 
               <Text style={[styles.label, { marginTop: 12 }]}>From (Sender ID)</Text>
               <View style={styles.selectRow}>
-                <Text style={{ color: "#fff" }}>Depth Route</Text>
+                <Text style={{ color: colors.text }}>Depth Route</Text>
                 <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
               </View>
 
@@ -106,23 +109,23 @@ export default function SMS() {
 
               <TouchableOpacity style={styles.sendBtn} testID="sms-send">
                 <Ionicons name="paper-plane" size={16} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "700" }}>Send SMS</Text>
+                <Text style={{ color: colors.text, fontWeight: "700" }}>Send SMS</Text>
               </TouchableOpacity>
             </View>
           )}
 
           <View style={styles.recentCard}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>Recent Messages</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", fontSize: 16 }}>Recent Messages</Text>
               <Text style={{ color: colors.primary, fontSize: 13 }}>View All</Text>
             </View>
-            {data.recent.map((m: any, i: number) => (
-              <View key={m.id} style={[styles.msgRow, i !== data.recent.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
+            {(Array.isArray(data) ? data : []).map((m: any, i: number) => (
+              <View key={m.id} style={[styles.msgRow, i !== (Array.isArray(data) ? data : []).length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
                 <View style={[styles.msgAvatar, { backgroundColor: m.color + "40" }]}>
                   <Text style={{ color: m.color, fontWeight: "700", fontSize: 12 }}>+1</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>{m.number}</Text>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: "600" }}>{m.number}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>{m.message}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
@@ -145,12 +148,12 @@ export default function SMS() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   statsRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   statCard: { flex: 1, padding: 10, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   icon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   statLabel: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
-  statValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginTop: 2 },
+  statValue: { color: colors.text, fontSize: 18, fontWeight: "700", marginTop: 2 },
   statSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
   tabsRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border, marginTop: 14 },
   tab: { paddingVertical: 12, paddingHorizontal: 16, position: "relative" },
@@ -160,7 +163,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textMuted, fontSize: 12 },
   charCount: { color: colors.textDim, fontSize: 11 },
   inputRow: { flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 8 },
-  inputFlex: { flex: 1, color: "#fff", fontSize: 14 },
+  inputFlex: { flex: 1, color: colors.text, fontSize: 14 },
   selectRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10, marginTop: 6 },
   actionsRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
   sendBtn: { alignSelf: "flex-end", flexDirection: "row", gap: 8, backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, marginTop: 12, alignItems: "center" },
@@ -169,4 +172,4 @@ const styles = StyleSheet.create({
   msgAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   statusPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   fab: { position: "absolute", bottom: 90, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-});
+}));

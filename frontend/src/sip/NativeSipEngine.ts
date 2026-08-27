@@ -13,6 +13,7 @@ import {
   SipLogEntry,
 } from "./SipTypes";
 import { getPjsip, isPjsipAvailable, PjsipCallState, PjsipRegState } from "@/modules/expo-pjsip";
+import type { CallTransport, TransportAvailability } from "./CallEngine";
 import type { EventSubscription } from "expo-modules-core";
 
 type Listener = () => void;
@@ -71,6 +72,30 @@ export class NativeSipEngine {
   }
   getLogs(): SipLogEntry[] { return this.logs.slice().reverse(); }
   isSupported(): boolean { return isPjsipAvailable(); }
+
+  /** This engine is the SIP/UDP path (see CallEngine). */
+  readonly transport: CallTransport = "UDP";
+
+  /** Real availability for diagnostics/transport selection — never assumed. */
+  availability(): TransportAvailability {
+    if (!isPjsipAvailable()) {
+      return {
+        transport: "UDP",
+        available: false,
+        reason: "NO_NATIVE_MODULE",
+        detail: "The expo-pjsip native module is not linked in this build.",
+      };
+    }
+    if (!this.config) {
+      return {
+        transport: "UDP",
+        available: false,
+        reason: "NO_CONFIG",
+        detail: "No SIP identity has been loaded from sip-config.",
+      };
+    }
+    return { transport: "UDP", available: true };
+  }
 
   private setStatus(s: SipStatus) { this.status = s; this.notify(); }
 

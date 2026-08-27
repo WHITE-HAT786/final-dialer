@@ -48,6 +48,8 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    /** Per-field validation errors, when the endpoint reports them. */
+    public fields?: Record<string, string[]>,
   ) {
     super(message);
     this.name = "ApiError";

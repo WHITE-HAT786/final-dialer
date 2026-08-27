@@ -10,9 +10,37 @@ import { AuthProvider } from "@/src/AuthContext";
 import { SipEngineProvider } from "@/src/sip/SipEngineContext";
 import SipAuthBridge from "@/src/sip/SipAuthBridge";
 import IncomingCallOverlay from "@/src/components/IncomingCallOverlay";
+import { ThemeProvider, useTheme } from "@/src/theme/ThemeContext";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+
+/** The app shell, inside ThemeProvider so chrome follows the active theme. */
+function Shell() {
+  const { colors, isDark } = useTheme();
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <SipEngineProvider>
+            <StatusBar
+              barStyle={isDark ? "light-content" : "dark-content"}
+              backgroundColor={colors.bg}
+            />
+            <SipAuthBridge />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.bg },
+              }}
+            />
+            <IncomingCallOverlay />
+          </SipEngineProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
@@ -26,17 +54,8 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#050B1A" }}>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <SipEngineProvider>
-            <StatusBar barStyle="light-content" backgroundColor="#050B1A" />
-            <SipAuthBridge />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#050B1A" } }} />
-            <IncomingCallOverlay />
-          </SipEngineProvider>
-        </AuthProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
   );
 }

@@ -3,13 +3,16 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from "react
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSipEngine } from "@/src/sip/SipEngineContext";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
 
 /**
  * Full-screen modal that appears when a NEW incoming SIP call arrives (state=ringing, direction=incoming).
  * Answer -> navigates to /call, Decline -> hangs up.
  */
 export default function IncomingCallOverlay() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const engine = useSipEngine();
   const router = useRouter();
   const incoming = engine.calls.find(
@@ -64,13 +67,13 @@ export default function IncomingCallOverlay() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   tag: { color: colors.textMuted, textTransform: "uppercase", letterSpacing: 2, fontSize: 12, marginBottom: 30 },
   avatar: { width: 140, height: 140, borderRadius: 70, backgroundColor: colors.primaryDim, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontSize: 46, fontWeight: "700" },
-  name: { color: "#fff", fontSize: 28, fontWeight: "700", marginTop: 24 },
+  avatarText: { color: colors.text, fontSize: 46, fontWeight: "700" },
+  name: { color: colors.text, fontSize: 28, fontWeight: "700", marginTop: 24 },
   number: { color: colors.textMuted, fontSize: 15, marginTop: 4 },
   actions: { flexDirection: "row", gap: 60, marginTop: 80 },
   btn: { width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center" },
-});
+}));

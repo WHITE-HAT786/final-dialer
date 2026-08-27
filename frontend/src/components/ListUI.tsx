@@ -1,31 +1,59 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from "react-native";
+// Shared list-screen furniture: status pill, four-up stat strip, search row.
+//
+// The status map used to be a module-level constant built from the dark
+// palette, which froze it at import time. It is now a function of the active
+// palette — each of these is a real component, so each resolves the theme
+// through useTheme() rather than closing over a captured `colors`.
+import React, { useMemo } from "react";
+import { View, Text, StyleSheet, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Screen from "@/src/components/Screen";
-import { colors } from "@/src/theme";
+import { cardShadow, type Palette } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
 
 type StatusColor = { bg: string; fg: string };
-export const STATUS_COLORS: Record<string, StatusColor> = {
-  Active: { bg: colors.greenDim, fg: colors.green },
-  Inactive: { bg: colors.yellowDim, fg: colors.yellow },
-  Disabled: { bg: colors.redDim, fg: colors.red },
-  "In Use": { bg: colors.yellowDim, fg: colors.yellow },
-  Paid: { bg: colors.greenDim, fg: colors.green },
-  Unpaid: { bg: colors.yellowDim, fg: colors.yellow },
-  Overdue: { bg: colors.redDim, fg: colors.red },
-};
+
+/** Semantic status tints, resolved against whichever palette is active. */
+function statusColors(c: Palette): Record<string, StatusColor> {
+  return {
+    Active: { bg: c.greenSoft, fg: c.green },
+    Inactive: { bg: c.yellowSoft, fg: c.yellow },
+    Disabled: { bg: c.redSoft, fg: c.red },
+    "In Use": { bg: c.yellowSoft, fg: c.yellow },
+    Paid: { bg: c.greenSoft, fg: c.green },
+    Unpaid: { bg: c.yellowSoft, fg: c.yellow },
+    Overdue: { bg: c.redSoft, fg: c.red },
+  };
+}
 
 export function StatusPill({ status }: { status: string }) {
-  const c = STATUS_COLORS[status] || { bg: colors.card, fg: colors.textMuted };
+  const { colors } = useTheme();
+  const c = statusColors(colors)[status] || { bg: colors.cardAlt, fg: colors.textMuted };
   return (
-    <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: c.bg, alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 4 }}>
+    <View
+      style={{
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: c.bg,
+        alignSelf: "flex-start",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.fg }} />
       <Text style={{ color: c.fg, fontSize: 10, fontWeight: "700" }}>{status}</Text>
     </View>
   );
 }
 
-export function FourStatCard({ stats }: { stats: { label: string; value: any; color: string; icon: string; sub?: string; percent?: string }[] }) {
+export function FourStatCard({
+  stats,
+}: {
+  stats: { label: string; value: any; color: string; icon: string; sub?: string; percent?: string }[];
+}) {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   return (
     <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
       {stats.map((s, i) => (
@@ -44,23 +72,55 @@ export function FourStatCard({ stats }: { stats: { label: string; value: any; co
 }
 
 export function SearchRow({ placeholder, value, onChange, right }: any) {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   return (
     <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textMuted} />
-        <TextInput style={styles.searchInput} placeholder={placeholder} placeholderTextColor={colors.textDim} value={value} onChangeText={onChange} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textDim}
+          value={value}
+          onChangeText={onChange}
+        />
       </View>
       {right}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  statCard: { flex: 1, padding: 10, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  statIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  statLabel: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
-  statValue: { color: "#fff", fontSize: 20, fontWeight: "700" },
-  statSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
-  search: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 12, height: 42, borderWidth: 1, borderColor: colors.border },
-  searchInput: { flex: 1, color: "#fff", fontSize: 13 },
-});
+function makeStyles(c: Palette, dark: boolean) {
+  const lift = cardShadow(dark);
+  return StyleSheet.create({
+    statCard: {
+      flex: 1,
+      padding: 10,
+      backgroundColor: c.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      ...(lift ?? null),
+    },
+    statIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+    statLabel: { color: c.textMuted, fontSize: 11, marginTop: 6 },
+    statValue: { color: c.text, fontSize: 20, fontWeight: "700" },
+    statSub: { color: c.textMuted, fontSize: 10, marginTop: 2 },
+    // The design gives inputs their own fill token so a light field reads as
+    // a field, not as another card.
+    search: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: c.input,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      height: 46,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    searchInput: { flex: 1, color: c.text, fontSize: 13 },
+  });
+}

@@ -2,13 +2,17 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
-import { colors, spacing } from "@/src/theme";
-import { apiGet } from "@/src/api";
+import { spacing } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
+import { screensApi } from "@/src/api";
 
 export default function Voicemails() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [data, setData] = useState<any>(null);
   const [active, setActive] = useState("Voice Messages");
-  useEffect(() => { apiGet("/voicemails").then(setData); }, []);
+  useEffect(() => { screensApi.voicemails().then(setData).catch(() => setData([])); }, []);
 
   return (
     <Screen title="Voicemails" activeKey="voicemails" showBack showSip={false} showBell={false}
@@ -25,7 +29,7 @@ export default function Voicemails() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Text style={[styles.tabLabel, active === t && { color: colors.primary, fontWeight: "700" }]}>{t}</Text>
               {t === "Voice Messages" && (
-                <View style={styles.pillBadge}><Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>5</Text></View>
+                <View style={styles.pillBadge}><Text style={{ color: colors.text, fontSize: 10, fontWeight: "700" }}>{(Array.isArray(data) ? data : []).length}</Text></View>
               )}
             </View>
             {active === t && <View style={styles.underline} />}
@@ -38,10 +42,10 @@ export default function Voicemails() {
           {/* Stats */}
           <View style={styles.statsCard}>
             {[
-              { icon: "voicemail", family: "mc", color: colors.purple, label: "All Messages", value: data.stats.all },
-              { icon: "headset", family: "ion", color: colors.primary, label: "New Messages", value: data.stats.new },
-              { icon: "mic", family: "ion", color: colors.green, label: "Saved Messages", value: data.stats.saved },
-              { icon: "trash", family: "ion", color: colors.red, label: "Deleted", value: data.stats.deleted },
+              { icon: "voicemail", family: "mc", color: colors.purple, label: "All Messages", value: (Array.isArray(data) ? data : []).length },
+              { icon: "headset", family: "ion", color: colors.primary, label: "New Messages", value: (Array.isArray(data) ? data : []).filter((v: any) => v.is_new ?? v.unread).length },
+              { icon: "mic", family: "ion", color: colors.green, label: "Saved Messages", value: (Array.isArray(data) ? data : []).filter((v: any) => v.saved).length },
+              { icon: "trash", family: "ion", color: colors.red, label: "Deleted", value: (Array.isArray(data) ? data : []).filter((v: any) => v.deleted).length },
             ].map((s, i) => (
               <View key={i} style={styles.statItem}>
                 <View style={[styles.statIcon, { backgroundColor: s.color + "22" }]}>
@@ -61,7 +65,7 @@ export default function Voicemails() {
             </View>
           </View>
 
-          {data.items.map((v: any) => (
+          {(Array.isArray(data) ? data : []).map((v: any) => (
             <View key={v.id} style={styles.card} testID={`vm-${v.id}`}>
               <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                 <View style={[styles.avatar, { backgroundColor: v.color + "40" }]}>
@@ -70,7 +74,7 @@ export default function Voicemails() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>{v.name}</Text>
+                    <Text style={{ color: colors.text, fontWeight: "700", fontSize: 15 }}>{v.name}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 13 }}>{v.ext}</Text>
                     {v.new && <View style={styles.newPill}><Text style={{ color: colors.purple, fontSize: 10, fontWeight: "700" }}>New</Text></View>}
                   </View>
@@ -95,9 +99,9 @@ export default function Voicemails() {
                   </View>
                   <View style={styles.actions}>
                     {[
-                      { icon: "volume-high", label: "Speaker", color: "#fff" },
-                      { icon: "call", label: "Call Back", color: "#fff" },
-                      { icon: "download", label: "Save", color: "#fff" },
+                      { icon: "volume-high", label: "Speaker", color: colors.text },
+                      { icon: "call", label: "Call Back", color: colors.text },
+                      { icon: "download", label: "Save", color: colors.text },
                       { icon: "trash", label: "Delete", color: colors.red },
                     ].map((a, i) => (
                       <TouchableOpacity key={i} style={{ alignItems: "center", gap: 4 }}>
@@ -116,13 +120,13 @@ export default function Voicemails() {
               <MaterialCommunityIcons name="voicemail" size={18} color={colors.purple} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>Voicemail Storage</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{data.storage.used_mb} MB of {data.storage.total_mb} MB used</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", fontSize: 14 }}>Voicemail Storage</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Storage usage unavailable</Text>
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${data.storage.percent}%`, backgroundColor: colors.purple }]} />
+                <View style={[styles.progressFill, { width: "0%", backgroundColor: colors.purple }]} />
               </View>
             </View>
-            <Text style={{ color: colors.purple, fontWeight: "700", fontSize: 13 }}>{data.storage.percent}% Used</Text>
+            <Text style={{ color: colors.purple, fontWeight: "700", fontSize: 13 }}>{"—"}</Text>
           </View>
         </>
       )}
@@ -130,7 +134,7 @@ export default function Voicemails() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   tabs: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border, marginTop: 4 },
   tab: { paddingVertical: 12, paddingHorizontal: 16, position: "relative" },
   tabLabel: { color: colors.textMuted, fontSize: 14 },
@@ -140,7 +144,7 @@ const styles = StyleSheet.create({
   statItem: { flex: 1, alignItems: "center", gap: 4 },
   statIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   statLabel: { color: colors.textMuted, fontSize: 10, textAlign: "center" },
-  statValue: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  statValue: { color: colors.text, fontSize: 18, fontWeight: "700" },
   sortRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 14, marginBottom: 8 },
   card: { padding: 12, backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   avatar: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", position: "relative" },
@@ -155,4 +159,4 @@ const styles = StyleSheet.create({
   miniIcon: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   progressTrack: { height: 4, backgroundColor: colors.border, borderRadius: 2, marginTop: 6 },
   progressFill: { height: 4, borderRadius: 2 },
-});
+}));

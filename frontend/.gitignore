@@ -46,3 +46,9 @@ app-example
 package-lock.json
 # Android/iOS signing material
 *.keystore
+
+# Native PJSIP build products — regenerated from source via the WSL/NDK recipe.
+# Kept out of git so the repo stays light; see the module README to rebuild.
+modules/expo-pjsip/android/build/
+modules/expo-pjsip/android/libs/
+modules/expo-pjsip/android/src/main/jniLibs/

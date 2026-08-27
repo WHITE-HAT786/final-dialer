@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
 import { apiGet } from "@/src/api";
 
 const TABS = ["All", "Unread", "System", "Account", "Billing", "Security"];
@@ -10,6 +11,8 @@ const TABS = ["All", "Unread", "System", "Account", "Billing", "Security"];
 const MC_ICONS = ["voicemail", "shield-check", "cog", "card-plus", "call-missed"];
 
 export default function Notifications() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [data, setData] = useState<any>(null);
   const [active, setActive] = useState("All");
   useEffect(() => { apiGet("/notifications").then(setData); }, []);
@@ -36,7 +39,7 @@ export default function Notifications() {
               <Ionicons name="notifications" size={20} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Stay updated!</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", fontSize: 15 }}>Stay updated!</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Here you will see all the important updates and alerts.</Text>
             </View>
             <TouchableOpacity style={styles.filter}>
@@ -56,7 +59,7 @@ export default function Notifications() {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>{n.title}</Text>
+                <Text style={{ color: colors.text, fontWeight: "700", fontSize: 14 }}>{n.title}</Text>
                 <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{n.body}</Text>
               </View>
               <View style={{ alignItems: "flex-end", gap: 6 }}>
@@ -71,7 +74,7 @@ export default function Notifications() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   tabLabel: { color: colors.textMuted, fontSize: 14 },
   underline: { height: 2, backgroundColor: colors.primary, borderRadius: 1, marginTop: 6 },
   banner: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: colors.card, borderRadius: 14, marginTop: 12, borderWidth: 1, borderColor: colors.border },
@@ -80,4 +83,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: colors.card, borderRadius: 12, marginTop: 8, borderWidth: 1, borderColor: colors.border },
   icon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   dot: { width: 8, height: 8, borderRadius: 4 },
-});
+}));

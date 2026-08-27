@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
-import { colors } from "@/src/theme";
-import { apiGet } from "@/src/api";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
+
 
 const TABS = [
   { key: "all", label: "All Recordings", field: "all" },
@@ -12,9 +13,14 @@ const TABS = [
 ];
 
 export default function Recordings() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [data, setData] = useState<any>(null);
   const [active, setActive] = useState("all");
-  useEffect(() => { apiGet("/recordings").then(setData); }, []);
+  // No customer-facing recordings endpoint exists on the WebDialer app API
+  // (/backend/api/app/recordings.php -> 404; only an admin endpoint exists).
+  // Render an honest unavailable state rather than inventing recordings.
+  useEffect(() => { setData(null); }, []);
 
   return (
     <Screen title="Recordings" activeKey="recordings" showBack showSip={false} showBell={false}
@@ -76,7 +82,7 @@ export default function Recordings() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>{r.name}</Text>
+                    <Text style={{ color: colors.text, fontWeight: "700", fontSize: 14 }}>{r.name}</Text>
                     <View style={[styles.typePill, { backgroundColor: r.type === "Voicemail" ? colors.purpleDim : colors.greenDim }]}>
                       <Text style={{ color: r.type === "Voicemail" ? colors.purple : colors.green, fontSize: 10, fontWeight: "700" }}>{r.type}</Text>
                     </View>
@@ -108,7 +114,7 @@ export default function Recordings() {
               <Ionicons name="mic" size={18} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>Recording Storage</Text>
+              <Text style={{ color: colors.text, fontWeight: "700", fontSize: 14 }}>Recording Storage</Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{data.storage.used_gb} GB of {data.storage.total_gb} GB used</Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${data.storage.percent}%`, backgroundColor: colors.primary }]} />
@@ -122,7 +128,7 @@ export default function Recordings() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   tabsRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border, marginTop: 4 },
   tab: { paddingVertical: 12, paddingHorizontal: 8, position: "relative", flex: 1, alignItems: "center" },
   tabLabel: { color: colors.textMuted, fontSize: 12 },
@@ -132,7 +138,7 @@ const styles = StyleSheet.create({
   statItem: { flex: 1, alignItems: "center", gap: 4 },
   statIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   statLabel: { color: colors.textMuted, fontSize: 10, textAlign: "center" },
-  statValue: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  statValue: { color: colors.text, fontSize: 15, fontWeight: "700" },
   sortRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 14, marginBottom: 8 },
   card: { padding: 12, backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
@@ -145,4 +151,4 @@ const styles = StyleSheet.create({
   miniIcon: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   progressTrack: { height: 4, backgroundColor: colors.border, borderRadius: 2, marginTop: 6 },
   progressFill: { height: 4, borderRadius: 2 },
-});
+}));

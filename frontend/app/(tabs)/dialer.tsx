@@ -15,7 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Screen from "@/src/components/Screen";
-import { colors, spacing } from "@/src/theme";
+import { spacing } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
 import { sipBootstrapLabel, isRetryable, SipBootstrapState } from "@/src/sip/sipBootstrap";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
@@ -37,6 +39,9 @@ const KEYS = [
 ];
 
 export default function Dialer() {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const countryStyles = useCountryStyles();
   const router = useRouter();
   const { selectedAccount, selectedRuntime, runtimes, call, bootstrap, retryBootstrap } = useMultiSip();
   const [num, setNum] = useState("");
@@ -172,9 +177,7 @@ export default function Dialer() {
             onPress={() => t.route && router.push(t.route as any)}
             testID={`dialer-tab-${t.label.toLowerCase()}`}
           >
-            <Ionicons name={t.icon as any} size={20} color={t.active ? colors.green : colors.textMuted} />
-            <Text style={[styles.tabLabel, t.active && { color: colors.green }]}>{t.label}</Text>
-            {t.active && <View style={styles.tabUnderline} />}
+            <Text style={[styles.tabLabel, t.active && styles.tabLabelActive]}>{t.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -187,14 +190,14 @@ export default function Dialer() {
           testID="dialer-country-picker"
         >
           <Text style={{ fontSize: 16 }}>{country.flag}</Text>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>{country.code}</Text>
+          <Text style={{ color: colors.text, fontWeight: "600" }}>{country.code}</Text>
           <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
         </TouchableOpacity>
         <TextInput
           style={styles.numberInput}
           value={num}
           onChangeText={setNum}
-          placeholder="Enter number (e.g. 5551234)"
+          placeholder="Enter number"
           placeholderTextColor={colors.textDim}
           showSoftInputOnFocus={false}
           testID="dialer-input"
@@ -223,28 +226,33 @@ export default function Dialer() {
       {/* Action row */}
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.sideAction} testID="dialer-video">
-          <Ionicons name="videocam" size={22} color={colors.green} />
-          <Text style={styles.sideActionLabel}>Video Call</Text>
+          <View style={styles.sideActionIcon}>
+            <Ionicons name="videocam" size={20} color={colors.textMuted} />
+          </View>
+          <Text style={styles.sideActionLabel}>Video</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.callBtn} onPress={startCall} testID="dialer-call">
-          <Ionicons name="call" size={30} color="#fff" />
+          <Ionicons name="call" size={28} color={colors.onPrimary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.sideAction} testID="dialer-dtmf">
-          <Ionicons name="keypad" size={22} color={colors.textMuted} />
+          <View style={styles.sideActionIcon}>
+            <Ionicons name="keypad" size={20} color={colors.textMuted} />
+          </View>
           <Text style={styles.sideActionLabel}>DTMF</Text>
         </TouchableOpacity>
       </View>
 
       {/* Quick actions */}
-      <View style={styles.qaCard}>
-        <Text style={styles.qaHeader}>Quick Actions</Text>
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-          <QA icon="swap-horizontal" bg={colors.greenDim} color={colors.green} label="Call Transfer" mci />
-          <QA icon="pause-circle-outline" bg={colors.yellowDim} color={colors.yellow} label="Call Hold" />
-          <QA icon="mic-off" bg={colors.purpleDim} color={colors.purple} label="Mute" />
-          <QA icon="call" bg={colors.redDim} color={colors.red} label="Hangup" rotate />
-        </View>
+      {/* These act on a live call, so they read as unavailable until there is
+          one — the design dims them rather than pretending they are live. */}
+      <Text style={styles.qaHeader}>IN-CALL CONTROLS</Text>
+      <View style={styles.qaRow}>
+        <QA icon="swap-horizontal" bg={colors.greenSoft} color={colors.green} label="Transfer" mci />
+        <QA icon="pause-circle-outline" bg={colors.yellowSoft} color={colors.yellow} label="Hold" />
+        <QA icon="mic-off" bg={colors.purpleSoft} color={colors.purple} label="Mute" />
+        <QA icon="call" bg={colors.redSoft} color={colors.red} label="Hang up" rotate />
       </View>
+      <Text style={styles.qaNote}>Available once a call connects.</Text>
       <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} />
 
       {/* Country code picker */}
@@ -293,38 +301,44 @@ export default function Dialer() {
 }
 
 function QA({ icon, bg, color, label, rotate, mci }: any) {
+  const qaStyles = useQaStyles();
   return (
-    <TouchableOpacity style={qaStyles.item}>
+    <View style={qaStyles.item} accessibilityState={{ disabled: true }}>
       <View style={[qaStyles.icon, { backgroundColor: bg }]}>
         {mci ? (
-          <MaterialCommunityIcons name={icon} size={22} color={color} />
+          <MaterialCommunityIcons name={icon} size={17} color={color} />
         ) : (
           <Ionicons
             name={icon}
-            size={22}
+            size={17}
             color={color}
             style={rotate ? { transform: [{ rotate: "135deg" }] } : undefined}
           />
         )}
       </View>
       <Text style={qaStyles.label}>{label}</Text>
-    </TouchableOpacity>
+    </View>
   );
 }
 
-const qaStyles = StyleSheet.create({
-  item: { flex: 1, alignItems: "center", gap: 6 },
+const useQaStyles = makeThemedStyles((colors) => StyleSheet.create({
+  item: {
+    flex: 1, alignItems: "center", gap: 8,
+    paddingVertical: 12, paddingHorizontal: 6,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 12, opacity: 0.55,
+  },
   icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  label: { color: "#fff", fontSize: 11, textAlign: "center" },
-});
+  label: { color: colors.textMuted, fontSize: 11, textAlign: "center" },
+}));
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, backgroundColor: colors.redDim + "80", borderWidth: 1, borderColor: colors.red + "50", borderRadius: 12, marginTop: 10 },
   errorText: { flex: 1, color: colors.red, fontSize: 12, fontWeight: "600" },
   sipCard: {
@@ -332,16 +346,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 8,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   sipIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -359,83 +374,88 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sipLabel: { color: colors.textMuted, fontSize: 12 },
-  sipName: { color: "#fff", fontSize: 16, fontWeight: "700", marginTop: 2 },
+  sipLabel: { color: colors.textDim, fontSize: 11, fontWeight: "600", letterSpacing: 0.6 },
+  sipName: { color: colors.text, fontSize: 15, fontWeight: "600", marginTop: 3 },
   sipHost: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   tabRow: {
     flexDirection: "row",
-    marginTop: spacing.md,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderRadius: 12,
+    gap: 4,
+    marginTop: 14,
+    padding: 4,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 4,
-    position: "relative",
+    borderRadius: 12,
   },
-  tabActive: { backgroundColor: colors.greenDim, borderColor: colors.green + "40" },
-  tabLabel: { color: colors.textMuted, fontSize: 12 },
-  tabUnderline: {
-    position: "absolute",
-    bottom: 6,
-    width: 30,
-    height: 2,
-    backgroundColor: colors.green,
-    borderRadius: 1,
+  tab: {
+    flex: 1,
+    height: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  tabActive: { backgroundColor: colors.primarySoft },
+  tabLabel: { color: colors.textMuted, fontSize: 12.5, fontWeight: "600" },
+  tabLabelActive: { color: colors.primary },
   numberRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: spacing.md,
+    gap: 10,
+    marginTop: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingVertical: 10,
+    paddingBottom: 10,
   },
   flag: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 9,
   },
-  numberInput: { flex: 1, color: "#fff", fontSize: 16 },
+  numberInput: { flex: 1, color: colors.text, fontSize: 24, fontWeight: "500", letterSpacing: 1, padding: 0 },
   keypad: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginTop: spacing.md,
+    marginTop: 10,
   },
   key: {
     width: "30%",
-    aspectRatio: 1.6,
+    aspectRatio: 1.7,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 6,
-    gap: 2,
+    gap: 1,
   },
-  keyMain: { color: "#fff", fontSize: 28, fontWeight: "400" },
-  keySub: { color: colors.textMuted, fontSize: 10, letterSpacing: 2, fontWeight: "600" },
+  keyMain: { color: colors.text, fontSize: 27, fontWeight: "400", lineHeight: 32 },
+  keySub: { color: colors.textDim, fontSize: 9.5, letterSpacing: 1.8, fontWeight: "600" },
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 8,
+    paddingHorizontal: 24,
+    marginTop: 6,
   },
-  sideAction: { alignItems: "center", gap: 4, width: 70 },
-  sideActionLabel: { color: colors.textMuted, fontSize: 12 },
+  sideAction: { alignItems: "center", gap: 5, width: 64 },
+  sideActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sideActionLabel: { color: colors.textMuted, fontSize: 11 },
   callBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
@@ -451,29 +471,26 @@ const styles = StyleSheet.create({
   },
   metric: { flex: 1, alignItems: "center" },
   metricLabel: { color: colors.textMuted, fontSize: 12 },
-  metricValue: { color: "#fff", fontSize: 17, fontWeight: "700", marginTop: 4 },
+  metricValue: { color: colors.text, fontSize: 17, fontWeight: "700", marginTop: 4 },
   metricSuffix: { color: colors.textMuted, fontSize: 11 },
   metricDivider: { width: 1, backgroundColor: colors.border },
-  qaCard: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 14,
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+  qaHeader: {
+    color: colors.textDim, fontSize: 11, fontWeight: "700",
+    letterSpacing: 1.3, marginTop: 20, marginBottom: 10,
   },
-  qaHeader: { color: "#fff", fontSize: 15, fontWeight: "600" },
-});
+  qaRow: { flexDirection: "row", gap: 8 },
+  qaNote: { color: colors.textDim, fontSize: 11.5, marginTop: 8 },
+}));
 
-const countryStyles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
-  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "85%", backgroundColor: "#0C1526", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20, borderWidth: 1, borderColor: colors.border },
+const useCountryStyles = makeThemedStyles((colors) => StyleSheet.create({
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim },
+  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "85%", backgroundColor: colors.bgElev, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20, borderWidth: 1, borderColor: colors.border },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 12 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  title: { color: colors.text, fontSize: 18, fontWeight: "700" },
   searchBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.bgAlt, borderRadius: 10, paddingHorizontal: 12, height: 42, marginTop: 12, borderWidth: 1, borderColor: colors.border },
-  searchInput: { flex: 1, color: "#fff", fontSize: 14 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 14 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
-  name: { color: "#fff", fontSize: 14, flex: 1 },
+  name: { color: colors.text, fontSize: 14, flex: 1 },
   code: { color: colors.primary, fontWeight: "700", fontSize: 14 },
-});
+}));

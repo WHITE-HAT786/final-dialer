@@ -1,24 +1,33 @@
-import React, { useEffect, useRef } from "react";
+// Navigation drawer — implements the "Navigation drawer" frame of
+// DepthRoute App v2, in both themes.
+//
+// Design notes carried over from that frame:
+//   • the drawer sits on `bgElev`, not the page background, so it reads as a
+//     layer above the screen it covers;
+//   • the account is a CARD, and SIP registration is a status PILL beneath it
+//     rather than coloured text inside the row — a failed registration is a
+//     thing you can act on, so it carries a Retry;
+//   • rows use `text` at weight 500 with a muted icon, and the active row is a
+//     primary-soft fill with a primary icon and label.
+//
+// Routes are the app's real ones. The design frame lists an IVR entry, which
+// this build replaced with Audio Library and Recharge; those ship instead.
+import React, { useEffect, useMemo, useRef } from "react";
 import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  ScrollView,
-  Pressable,
+  Modal, View, Text, StyleSheet, TouchableOpacity, Animated,
+  Dimensions, ScrollView, Pressable,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { colors, spacing } from "@/src/theme";
+import { type Palette } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/AuthContext";
 import { useSipEngine } from "@/src/sip/SipEngineContext";
+import { BrandMark } from "@/src/components/BrandMark";
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const DRAWER_W = Math.min(SCREEN_W * 0.82, 340);
+const DRAWER_W = Math.min(SCREEN_W * 0.86, 330);
 
 type MenuItem = { key: string; label: string; icon: any; route: string; badge?: string };
 
@@ -35,16 +44,17 @@ const MAIN: MenuItem[] = [
 
 const MANAGE: MenuItem[] = [
   { key: "sip", label: "SIP Accounts", icon: ["mc", "server"], route: "/sip-accounts" },
-  { key: "extensions", label: "Extensions", icon: ["ion", "people"], route: "/extensions" },
   { key: "number", label: "Number", icon: ["ion", "call-outline"], route: "/numbers" },
-  { key: "ivr", label: "IVR", icon: ["mc", "sitemap"], route: "/ivr" },
+  { key: "recharge", label: "Recharge", icon: ["mc", "wallet-plus-outline"], route: "/recharge" },
+  { key: "audio-library", label: "Audio Library", icon: ["mc", "music-box-multiple"], route: "/audio-library" },
   { key: "plans", label: "Plans", icon: ["ion", "ribbon"], route: "/plans" },
   { key: "billing", label: "Billing", icon: ["ion", "wallet"], route: "/billing" },
 ];
 
+// No numeric badge here: a count must come from real data, never a constant.
 const SUPPORT: MenuItem[] = [
   { key: "help", label: "Help & Support", icon: ["ion", "help-circle"], route: "/support" },
-  { key: "notifications", label: "Notifications", icon: ["ion", "notifications"], route: "/notifications", badge: "3" },
+  { key: "notifications", label: "Notifications", icon: ["ion", "notifications"], route: "/notifications" },
 ];
 
 function Icon({ icon, size, color }: { icon: any; size: number; color: string }) {
@@ -53,10 +63,28 @@ function Icon({ icon, size, color }: { icon: any; size: number; color: string })
   return <Ionicons name={name} size={size} color={color} />;
 }
 
+/** Maps engine status onto the design's pill: tone, wording, and whether to offer Retry. */
+function sipPill(status: string, c: Palette) {
+  switch (status) {
+    case "registered":
+      return { text: "SIP Registered", fg: c.green, bg: c.greenSoft, br: c.greenBorder, retry: false };
+    case "connecting":
+      return { text: "Connecting…", fg: c.yellow, bg: c.yellowSoft, br: c.yellowBorder, retry: false };
+    case "registration_failed":
+      return { text: "Registration failed", fg: c.red, bg: c.redSoft, br: c.redBorder, retry: true };
+    case "error":
+      return { text: "SIP error", fg: c.red, bg: c.redSoft, br: c.redBorder, retry: true };
+    case "unsupported":
+      return { text: "SIP unsupported", fg: c.yellow, bg: c.yellowSoft, br: c.yellowBorder, retry: false };
+    case "unregistered":
+      return { text: "Unregistered", fg: c.textMuted, bg: c.cardAlt, br: c.border, retry: true };
+    default:
+      return { text: "Disconnected", fg: c.textMuted, bg: c.cardAlt, br: c.border, retry: true };
+  }
+}
+
 export default function Sidebar({
-  visible,
-  onClose,
-  active,
+  visible, onClose, active,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -64,29 +92,23 @@ export default function Sidebar({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark, toggle } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const { user, logout } = useAuth();
-  const { status } = useSipEngine();
-  const sipLabel =
-    status === "registered" ? { text: "SIP Registered", color: colors.green } :
-    status === "connecting" ? { text: "Connecting…", color: colors.yellow } :
-    status === "registration_failed" ? { text: "Registration Failed", color: colors.red } :
-    status === "unsupported" ? { text: "SIP Unsupported", color: colors.yellow } :
-    status === "error" ? { text: "SIP Error", color: colors.red } :
-    status === "unregistered" ? { text: "Unregistered", color: colors.textMuted } :
-    { text: "Disconnected", color: colors.textMuted };
+  // `connect` is the engine's existing re-registration entry point; Retry only
+  // calls it, it does not change any SIP behaviour.
+  const { status, connect } = useSipEngine();
+  const pill = sipPill(status, colors);
+
   const slide = useRef(new Animated.Value(-DRAWER_W)).current;
   const backdrop = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slide, {
-        toValue: visible ? 0 : -DRAWER_W,
-        duration: 240,
-        useNativeDriver: true,
-      }),
+      Animated.timing(slide, { toValue: visible ? 0 : -DRAWER_W, duration: 240, useNativeDriver: true }),
       Animated.timing(backdrop, { toValue: visible ? 1 : 0, duration: 240, useNativeDriver: true }),
     ]).start();
-  }, [visible]);
+  }, [visible, slide, backdrop]);
 
   const go = (route: string) => {
     onClose();
@@ -99,20 +121,26 @@ export default function Sidebar({
     router.replace("/login");
   };
 
+  const initials = (user?.name || "JD").split(" ").map((w) => w[0]).slice(0, 2).join("");
+  const ext = (user as any)?.ext;
+  const line = (user as any)?.username;
+
   const renderItem = (item: MenuItem) => {
-    const isActive = active === item.key;
+    const on = active === item.key;
     return (
       <TouchableOpacity
         key={item.key}
-        style={[styles.item, isActive && styles.itemActive]}
+        style={[s.item, on && s.itemActive]}
         onPress={() => go(item.route)}
         testID={`sidebar-item-${item.key}`}
+        accessibilityRole="button"
+        accessibilityState={on ? { selected: true } : undefined}
       >
-        <Icon icon={item.icon} size={20} color={isActive ? colors.primary : colors.textMuted} />
-        <Text style={[styles.itemText, isActive && styles.itemTextActive]}>{item.label}</Text>
-        {item.badge && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{item.badge}</Text>
+        <Icon icon={item.icon} size={20} color={on ? colors.primary : colors.textMuted} />
+        <Text style={[s.itemText, on && s.itemTextActive]}>{item.label}</Text>
+        {!!item.badge && (
+          <View style={s.badge}>
+            <Text style={s.badgeText}>{item.badge}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -121,171 +149,156 @@ export default function Sidebar({
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[styles.backdrop, { opacity: backdrop }]}>
+      <Animated.View style={[s.backdrop, { opacity: backdrop }]}>
         <Pressable style={{ flex: 1 }} onPress={onClose} testID="sidebar-backdrop" />
       </Animated.View>
-      <Animated.View
-        style={[
-          styles.drawer,
-          { transform: [{ translateX: slide }], paddingTop: insets.top + 12 },
-        ]}
-      >
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* Brand */}
-          <View style={styles.brandRow}>
-            <View style={styles.brandLogo}>
-              <MaterialCommunityIcons name="waveform" size={22} color="#fff" />
-            </View>
-            <Text style={styles.brandText}>Depth Route</Text>
+
+      <Animated.View style={[s.drawer, { transform: [{ translateX: slide }] }]}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingTop: insets.top + 16, paddingHorizontal: 16, paddingBottom: 20 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={s.brandRow}>
+            <BrandMark size={32} theme={isDark ? "dark" : "light"} />
+            <Text style={s.brandText}>Depth Route</Text>
           </View>
 
-          {/* User */}
-          <TouchableOpacity
-            style={styles.userRow}
-            onPress={() => go("/profile")}
-            testID="sidebar-user"
-          >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {(user?.name || "JD")
-                  .split(" ")
-                  .map((s) => s[0])
-                  .slice(0, 2)
-                  .join("")}
+          <TouchableOpacity style={s.userCard} onPress={() => go("/profile")} testID="sidebar-user">
+            <View style={s.avatar}>
+              <Text style={s.avatarText}>{initials}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.userName} numberOfLines={1}>{user?.name || "Account"}</Text>
+              <Text style={s.userSub} numberOfLines={1}>
+                {ext ? <Text style={s.userExt}>Ext {ext}</Text> : null}
+                {ext && line ? " · " : ""}
+                {line || ""}
               </Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.userName}>{user?.name || "John Doe"}</Text>
-              <Text style={styles.userExt}>
-                <Text style={{ color: colors.primary }}>1001</Text>{" "}
-                <Text style={{ color: colors.textMuted }}>({user?.name || "John Doe"})</Text>
-              </Text>
-              <View style={styles.sipInline}>
-                <View style={[styles.sipDot, { backgroundColor: sipLabel.color }]} />
-                <Text style={[styles.sipInlineText, { color: sipLabel.color }]}>{sipLabel.text}</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+            <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          {/* Registration state as an actionable pill, per the design frame. */}
+          <View
+            style={[s.sipPill, { backgroundColor: pill.bg, borderColor: pill.br }]}
+            testID="sidebar-sip-pill"
+          >
+            <View style={[s.sipDot, { backgroundColor: pill.fg }]} />
+            <Text style={[s.sipText, { color: pill.fg }]} numberOfLines={1}>{pill.text}</Text>
+            {pill.retry && (
+              <TouchableOpacity onPress={() => void connect()} testID="sidebar-sip-retry" hitSlop={8}>
+                <Text style={[s.sipRetry, { color: pill.fg }]}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-          <Text style={styles.sectionLabel}>MAIN</Text>
+          <View style={s.divider} />
+          <Text style={s.sectionLabel}>MAIN</Text>
           {MAIN.map(renderItem)}
 
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionLabel}>MANAGE</Text>
+          <View style={s.divider} />
+          <Text style={s.sectionLabel}>MANAGE</Text>
           {MANAGE.map(renderItem)}
 
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionLabel}>SUPPORT</Text>
+          <View style={s.divider} />
+          <Text style={s.sectionLabel}>SUPPORT</Text>
           {SUPPORT.map(renderItem)}
 
-          <TouchableOpacity style={styles.item} onPress={doLogout} testID="sidebar-logout">
+          <View style={s.divider} />
+          <TouchableOpacity style={s.item} onPress={doLogout} testID="sidebar-logout">
             <Ionicons name="log-out-outline" size={20} color={colors.red} />
-            <Text style={[styles.itemText, { color: colors.red }]}>Logout</Text>
+            <Text style={[s.itemText, s.logoutText]}>Log out</Text>
           </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>v2.5.0</Text>
-            <View style={styles.themeBtn}>
-              <Ionicons name="moon" size={16} color={colors.textMuted} />
-            </View>
-          </View>
         </ScrollView>
+
+        <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 12) + 22 }]}>
+          <Text style={s.footerText}>v2.5.0</Text>
+          <TouchableOpacity
+            style={s.themeBtn}
+            onPress={toggle}
+            testID="sidebar-theme-toggle"
+            accessibilityRole="button"
+            accessibilityLabel="Switch theme"
+            hitSlop={8}
+          >
+            <Ionicons
+              name={isDark ? "sunny-outline" : "moon-outline"}
+              size={15}
+              color={colors.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
       </Animated.View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  drawer: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: DRAWER_W,
-    backgroundColor: "#080F1F",
-    borderRightWidth: 1,
-    borderRightColor: colors.border,
-    paddingHorizontal: spacing.lg,
-  },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg },
-  brandLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  brandText: { color: "#fff", fontSize: 20, fontWeight: "700" },
-  userRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingBottom: spacing.md,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.primaryDim,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  userName: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  userExt: { fontSize: 13, marginTop: 2 },
-  sipInline: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
-  sipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.green },
-  sipInlineText: { color: colors.green, fontSize: 12, fontWeight: "600" },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  sectionLabel: {
-    color: colors.textDim,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    marginBottom: spacing.sm,
-  },
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  itemActive: { backgroundColor: colors.primaryDim + "80" },
-  itemText: { color: colors.textMuted, fontSize: 15, fontWeight: "500", flex: 1 },
-  itemTextActive: { color: colors.primary, fontWeight: "700" },
-  badge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: spacing.lg,
-    paddingHorizontal: 12,
-  },
-  footerText: { color: colors.textDim, fontSize: 12 },
-  themeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+function makeStyles(c: Palette) {
+  return StyleSheet.create({
+    backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: c.scrim },
+    drawer: {
+      position: "absolute", left: 0, top: 0, bottom: 0, width: DRAWER_W,
+      backgroundColor: c.bgElev,
+      borderRightWidth: 1, borderRightColor: c.border,
+    },
+
+    brandRow: { flexDirection: "row", alignItems: "center", gap: 11, marginBottom: 18 },
+    brandText: { color: c.text, fontSize: 19, fontWeight: "700", letterSpacing: -0.2 },
+
+    userCard: {
+      flexDirection: "row", alignItems: "center", gap: 12, padding: 12,
+      borderRadius: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+    },
+    avatar: {
+      width: 44, height: 44, borderRadius: 22, backgroundColor: c.primarySoft,
+      alignItems: "center", justifyContent: "center",
+    },
+    avatarText: { color: c.primary, fontSize: 15, fontWeight: "700" },
+    userName: { color: c.text, fontSize: 14.5, fontWeight: "600" },
+    userSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    userExt: { color: c.primary, fontWeight: "600" },
+
+    sipPill: {
+      flexDirection: "row", alignItems: "center", gap: 9, marginTop: 8,
+      paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1,
+    },
+    sipDot: { width: 6, height: 6, borderRadius: 3 },
+    sipText: { flex: 1, fontSize: 12, fontWeight: "600" },
+    sipRetry: { fontSize: 12, fontWeight: "700", textDecorationLine: "underline" },
+
+    divider: { height: 1, backgroundColor: c.border, marginVertical: 14 },
+    sectionLabel: {
+      color: c.textDim, fontSize: 11, fontWeight: "700",
+      letterSpacing: 1.3, marginLeft: 12, marginBottom: 6,
+    },
+
+    item: {
+      flexDirection: "row", alignItems: "center", gap: 13,
+      paddingVertical: 11, paddingHorizontal: 12, borderRadius: 10,
+    },
+    itemActive: { backgroundColor: c.primarySoft },
+    itemText: { color: c.text, fontSize: 14.5, fontWeight: "500", flex: 1 },
+    itemTextActive: { color: c.primary, fontWeight: "600" },
+    logoutText: { color: c.red, fontWeight: "600" },
+
+    badge: {
+      paddingHorizontal: 8, paddingVertical: 2, borderRadius: 7,
+      backgroundColor: c.primary,
+    },
+    badgeText: { color: c.onPrimary, fontSize: 10, fontWeight: "700" },
+
+    footer: {
+      flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+      paddingTop: 12, paddingHorizontal: 20,
+      borderTopWidth: 1, borderTopColor: c.border,
+      backgroundColor: c.bgElev,
+    },
+    footerText: { color: c.textDim, fontSize: 11.5 },
+    themeBtn: {
+      width: 32, height: 32, borderRadius: 16,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      alignItems: "center", justifyContent: "center",
+    },
+  });
+}

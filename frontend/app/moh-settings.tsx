@@ -12,7 +12,9 @@ import {
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import Screen from "@/src/components/Screen";
-import { colors, spacing } from "@/src/theme";
+import { spacing } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { makeThemedStyles } from "@/src/theme/useThemedStyles";
 import {
   loadMohPrefs,
   saveMohPrefs,
@@ -29,6 +31,8 @@ function humanBytes(n: number) {
 }
 
 export default function MohSettings() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [prefs, setPrefs] = useState<MohPrefs | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -278,6 +282,8 @@ function SourceRow({
   testID: string;
   warning?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <TouchableOpacity style={styles.sourceRow} onPress={onPress} testID={testID}>
       <View style={[styles.sourceIcon, selected && { backgroundColor: colors.primaryDim }]}>
@@ -310,7 +316,7 @@ function SourceRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeThemedStyles((colors) => StyleSheet.create({
   headerCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -330,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  headerTitle: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  headerTitle: { color: colors.text, fontSize: 15, fontWeight: "700" },
   headerSub: { color: colors.textMuted, fontSize: 12, marginTop: 3 },
   sectionLabel: {
     color: colors.textDim,
@@ -362,7 +368,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sourceTitle: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  sourceTitle: { color: colors.text, fontSize: 15, fontWeight: "600" },
   sourceSub: { color: colors.textMuted, fontSize: 12, marginTop: 3, lineHeight: 16 },
   radio: {
     width: 22,
@@ -405,7 +411,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  fileName: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  fileName: { color: colors.text, fontSize: 14, fontWeight: "600" },
   fileSize: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   previewBtn: {
     flexDirection: "row",
@@ -425,7 +431,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 14,
   },
-  rowLabel: { color: "#fff", fontSize: 14 },
+  rowLabel: { color: colors.text, fontSize: 14 },
   pickBtn: {
     padding: 24,
     alignItems: "center",
@@ -434,8 +440,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     margin: 4,
   },
-  pickText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  pickSub: { color: "#fff", fontSize: 11, opacity: 0.85 },
+  pickText: { color: colors.onPrimary, fontSize: 15, fontWeight: "700" },
+  pickSub: { color: colors.text, fontSize: 11, opacity: 0.85 },
   notice: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -457,4 +463,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenDim,
     borderRadius: 999,
   },
-});
+}));
