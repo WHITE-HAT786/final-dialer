@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import Screen from "@/src/components/Screen";
 import { colors, spacing } from "@/src/theme";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
+import { sipBootstrapLabel, isRetryable, SipBootstrapState } from "@/src/sip/sipBootstrap";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 import { COUNTRIES, DEFAULT_COUNTRY } from "@/src/data/countries";
 
@@ -37,7 +38,7 @@ const KEYS = [
 
 export default function Dialer() {
   const router = useRouter();
-  const { selectedAccount, selectedRuntime, runtimes, call } = useMultiSip();
+  const { selectedAccount, selectedRuntime, runtimes, call, bootstrap, retryBootstrap } = useMultiSip();
   const [num, setNum] = useState("");
   const [sipPicker, setSipPicker] = useState(false);
   const [countryPicker, setCountryPicker] = useState(false);
@@ -47,26 +48,47 @@ export default function Dialer() {
 
   const selName = selectedAccount?.displayName || selectedAccount?.username || "No SIP account";
   const selDid = selectedAccount?.callerId || (selectedAccount ? `${selectedAccount.username}@${selectedAccount.domain}` : "Tap to add");
-  const selHost = selectedAccount?.wssUrl || "";
-  const selColor = (() => {
-    switch (selectedRuntime?.status) {
+  const selHost = selectedAccount?.host || selectedAccount?.domain || "";
+  // The customer's own backend line (ephemeral/primary) reports the bootstrap
+  // state; a manually-added account reports its engine status.
+  const usingPrimary = !selectedAccount || !!selectedAccount.ephemeral;
+  const bootColor = (s: SipBootstrapState): string => {
+    switch (s) {
       case "registered": return colors.green;
-      case "connecting": return colors.yellow;
-      case "registration_failed": return colors.red;
-      default: return selectedAccount?.color || colors.textMuted;
+      case "loading":
+      case "registering": return colors.yellow;
+      case "no_extension":
+      case "needs_provision": return colors.orange;
+      case "unavailable":
+      case "registration_failed":
+      case "error": return colors.red;
+      default: return colors.textMuted;
     }
-  })();
-  const selStatusLabel = (() => {
-    switch (selectedRuntime?.status) {
-      case "registered": return "Registered";
-      case "connecting": return "Connecting…";
-      case "registration_failed": return "Registration Failed";
-      case "unsupported": return "Unsupported";
-      case "error": return "Error";
-      case "unregistered": return "Unregistered";
-      default: return runtimes.length === 0 ? "No SIP account" : "Disconnected";
-    }
-  })();
+  };
+  const selColor = usingPrimary
+    ? bootColor(bootstrap)
+    : (() => {
+        switch (selectedRuntime?.status) {
+          case "registered": return colors.green;
+          case "connecting": return colors.yellow;
+          case "registration_failed": return colors.red;
+          default: return selectedAccount?.color || colors.textMuted;
+        }
+      })();
+  const selStatusLabel = usingPrimary
+    ? sipBootstrapLabel(bootstrap)
+    : (() => {
+        switch (selectedRuntime?.status) {
+          case "registered": return "Registered";
+          case "connecting": return "Connecting…";
+          case "registration_failed": return "Registration Failed";
+          case "unsupported": return "Unsupported";
+          case "error": return "Error";
+          case "unregistered": return "Unregistered";
+          default: return runtimes.length === 0 ? "No SIP account" : "Disconnected";
+        }
+      })();
+  const showRetry = usingPrimary && isRetryable(bootstrap);
 
   const press = (k: string) => {
     Haptics.selectionAsync().catch(() => {});
@@ -117,6 +139,11 @@ export default function Dialer() {
           <Text style={styles.sipName} numberOfLines={1}>{selName}</Text>
           <Text style={styles.sipHost} numberOfLines={1}>{selHost || "—"}</Text>
           <Text style={[styles.sipHost, { color: selColor }]} numberOfLines={1}>{selStatusLabel}{selectedAccount && ` · ${selDid}`}</Text>
+          {showRetry && (
+            <TouchableOpacity onPress={retryBootstrap} testID="dialer-sip-retry" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={[styles.sipHost, { color: colors.primary, marginTop: 2, fontWeight: "700" }]}>Tap to retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
       </TouchableOpacity>

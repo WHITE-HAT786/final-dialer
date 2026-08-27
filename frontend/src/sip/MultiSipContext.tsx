@@ -7,6 +7,14 @@ import { storage } from "@/src/utils/storage";
 import { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipTypes";
 import { NativeSipEngine } from "./NativeSipEngine";
 import { isPjsipAvailable } from "@/modules/expo-pjsip";
+import { loadSipAccountFromBackend } from "./loadSipConfig";
+import {
+  SipBootstrapState,
+  SipConfigAccount,
+  classifyBootstrapError,
+  isRegistrableConfig,
+  mapEngineStatus,
+} from "./sipBootstrap";
 
 export type SipAccount = {
   id: string;
@@ -21,8 +29,10 @@ export type SipAccount = {
   outboundProxy?: string | null;
   callerId?: string;
   authUser?: string;
+  registerExpires?: number; // backend-supplied REGISTER expiry (seconds)
   enabled: boolean;
   color?: string;
+  ephemeral?: boolean; // backend-bootstrapped primary line — NEVER persisted
 };
 
 export type AccountRuntime = {
@@ -35,6 +45,9 @@ export type AccountRuntime = {
 
 const ACCOUNTS_KEY = "sip_accounts_v1";
 const SELECTED_KEY = "sip_selected_account_v1";
+// The customer's own extension, loaded from /sip-config.php after auth. Held in
+// memory only (never persisted), so its SIP password never touches storage.
+const PRIMARY_ID = "primary_backend";
 
 const ACCENT_COLORS = ["#22C55E", "#3B82F6", "#A855F7", "#F59E0B", "#14B8A6", "#EC4899", "#EF4444"];
 
@@ -73,7 +86,7 @@ function toConfig(a: SipAccount): SipConfig {
     port: a.port || 5060,
     transport,
     outboundProxy: a.outboundProxy ?? null,
-    registerExpires: 300,
+    registerExpires: a.registerExpires ?? 300,
   };
 }
 
@@ -84,6 +97,12 @@ function canRegister(a: SipAccount): boolean {
 
 type Ctx = {
   supported: boolean;
+  // Backend-driven primary line (the customer's own extension via /sip-config.php)
+  bootstrap: SipBootstrapState;
+  bootstrapError?: string;
+  bootstrapPrimary: () => Promise<void>;
+  teardownPrimary: () => Promise<void>;
+  retryBootstrap: () => void;
   accounts: SipAccount[];
   runtimes: AccountRuntime[];
   selectedId: string | null;
@@ -118,6 +137,9 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
   const [engines] = useState<Map<string, NativeSipEngine>>(() => new Map());
   const [tick, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+  // Bootstrap state for the customer's OWN backend line (the primary account).
+  const [bootstrap, setBootstrap] = useState<SipBootstrapState>("idle");
+  const [bootstrapError, setBootstrapError] = useState<string | undefined>(undefined);
 
   // Ensure an engine exists for a given account
   const ensureEngine = useCallback((a: SipAccount) => {
@@ -150,7 +172,10 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
 
   const persist = useCallback(async (next: SipAccount[]) => {
     setAccounts(next);
-    await storage.secureSet(ACCOUNTS_KEY, next);
+    // NEVER persist the backend-bootstrapped (ephemeral) account or its SIP
+    // password. It is re-fetched from /sip-config.php on each authenticated
+    // session and lives only in memory.
+    await storage.secureSet(ACCOUNTS_KEY, next.filter((a) => !a.ephemeral));
   }, []);
 
   const addAccount: Ctx["addAccount"] = useCallback(async (a) => {
@@ -210,6 +235,73 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     const eng = engines.get(id);
     if (eng) await eng.disconnect();
   }, [engines]);
+
+  // --- Backend-driven SIP bootstrap (the customer's OWN extension) -----------
+  // Called by SipAuthBridge once the user is authenticated. Fetches the device
+  // credentials from /sip-config.php (token only) and registers over SIP/UDP.
+  const bootstrapPrimary = useCallback(async () => {
+    setBootstrapError(undefined);
+    setBootstrap("loading");
+    let cfg: SipConfigAccount | null = null;
+    try {
+      cfg = await loadSipAccountFromBackend(); // GET /sip-config.php — bearer token only
+    } catch (e) {
+      const { state, message } = classifyBootstrapError(e);
+      setBootstrap(state);
+      setBootstrapError(message);
+      return; // terminal: no crash, no auto-retry loop; manual retry only
+    }
+    if (!isRegistrableConfig(cfg)) {
+      setBootstrap("error");
+      setBootstrapError("Incomplete SIP configuration from the server.");
+      return;
+    }
+    // In-memory only — never persisted (no secureSet path), so the SIP password
+    // never touches storage. Replace any prior primary; keep manual accounts.
+    const primary: SipAccount = { id: PRIMARY_ID, color: ACCENT_COLORS[0], ephemeral: true, ...cfg };
+    setAccounts((prev) => [primary, ...prev.filter((a) => a.id !== PRIMARY_ID)]);
+    setSelectedId(PRIMARY_ID); // make the customer's own line the active one
+    if (!isPjsipAvailable()) {
+      // Native PJSIP module not linked (Expo Go / web / missing .so). Config is
+      // loaded, but SIP/UDP registration cannot run — report it honestly.
+      setBootstrap("unsupported");
+      return;
+    }
+    setBootstrap("registering");
+    const eng = ensureEngine(primary);
+    await eng.connect(toConfig(primary)); // engine drives status from here (effect below)
+  }, [ensureEngine]);
+
+  const teardownPrimary = useCallback(async () => {
+    const eng = engines.get(PRIMARY_ID);
+    if (eng) {
+      try { await eng.disconnect(); } catch { /* best effort: unregister + destroy */ }
+      engines.delete(PRIMARY_ID);
+    }
+    // Drop the account (and its in-memory SIP password) from state entirely.
+    setAccounts((prev) => prev.filter((a) => a.id !== PRIMARY_ID));
+    setSelectedId((prev) => (prev === PRIMARY_ID ? null : prev));
+    setBootstrapError(undefined);
+    setBootstrap("idle");
+  }, [engines]);
+
+  const retryBootstrap = useCallback(() => { void bootstrapPrimary(); }, [bootstrapPrimary]);
+
+  // Reflect the primary engine's live registration status into `bootstrap`, but
+  // ONLY once registration has started. Load-phase states (idle/loading/
+  // no_extension/needs_provision/unavailable/unsupported/error) are owned by
+  // bootstrapPrimary and must not be clobbered by the always-created runtime engine.
+  useEffect(() => {
+    void tick;
+    setBootstrap((prev) => {
+      if (prev !== "registering" && prev !== "registered" && prev !== "unregistered" && prev !== "registration_failed") {
+        return prev;
+      }
+      const eng = engines.get(PRIMARY_ID);
+      if (!eng) return prev;
+      return mapEngineStatus(eng.getStatus());
+    });
+  }, [tick, engines]);
 
   const call: Ctx["call"] = useCallback(async (target, accId) => {
     const id = accId || selectedId;
@@ -326,6 +418,11 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     supported: isPjsipAvailable(),
+    bootstrap,
+    bootstrapError,
+    bootstrapPrimary,
+    teardownPrimary,
+    retryBootstrap,
     accounts,
     runtimes,
     selectedId,

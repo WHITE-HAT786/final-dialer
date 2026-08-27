@@ -42,17 +42,21 @@ export default function SipAccountsScreen() {
   } = useMultiSip();
   const [form, setForm] = useState<null | { id?: string } & Omit<SipAccount, "id" | "color">>(null);
   const [showLog, setShowLog] = useState(false);
+  // The customer's own backend line (ephemeral) is auto-managed via sip-config.php;
+  // its SIP password must never be shown/edited here, so only manually-added
+  // accounts appear on this screen.
+  const manualRuntimes = runtimes.filter((r) => !r.account.ephemeral);
 
   const stats = useMemo(() => {
-    const total = runtimes.length;
-    const active = runtimes.filter((r) => r.status === "registered").length;
-    const connecting = runtimes.filter((r) => r.status === "connecting").length;
-    const failed = runtimes.filter((r) => r.status === "registration_failed" || r.status === "error").length;
+    const total = manualRuntimes.length;
+    const active = manualRuntimes.filter((r) => r.status === "registered").length;
+    const connecting = manualRuntimes.filter((r) => r.status === "connecting").length;
+    const failed = manualRuntimes.filter((r) => r.status === "registration_failed" || r.status === "error").length;
     return { total, active, connecting, failed };
-  }, [runtimes]);
+  }, [manualRuntimes]);
 
   const startAdd = () => setForm({
-    ...(runtimes.length === 0 ? { ...DEFAULT_ACCOUNT } : { displayName: "", username: "", password: "", domain: "", host: "", port: 5060, transport: "UDP" as any, wssUrl: "", callerId: "", authUser: "", enabled: true }),
+    ...(manualRuntimes.length === 0 ? { ...DEFAULT_ACCOUNT } : { displayName: "", username: "", password: "", domain: "", host: "", port: 5060, transport: "UDP" as any, wssUrl: "", callerId: "", authUser: "", enabled: true }),
   });
 
   const startEdit = (r: any) => setForm({
@@ -116,29 +120,19 @@ export default function SipAccountsScreen() {
         <Stat label="Failed" value={stats.failed} color={colors.red} />
       </View>
 
-      {runtimes.length === 0 && (
+      {manualRuntimes.length === 0 && (
         <View style={styles.empty} testID="sip-empty-state">
           <MaterialCommunityIcons name="server-network-off" size={54} color={colors.textDim} />
-          <Text style={styles.emptyTitle}>No SIP accounts yet</Text>
-          <Text style={styles.emptySub}>Add your first account to start making real calls.</Text>
+          <Text style={styles.emptyTitle}>No additional SIP accounts</Text>
+          <Text style={styles.emptySub}>Your own line is set up automatically after sign-in. Add another account only if you need one.</Text>
           <TouchableOpacity style={styles.emptyBtn} onPress={startAdd} testID="sip-empty-add">
             <Ionicons name="add" size={16} color="#fff" />
             <Text style={styles.emptyBtnText}>Add SIP Account</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.emptyBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary, marginTop: 8 }]}
-            onPress={async () => {
-              await addAccount({ ...DEFAULT_ACCOUNT });
-            }}
-            testID="sip-empty-add-demo"
-          >
-            <Ionicons name="flash" size={16} color={colors.primary} />
-            <Text style={[styles.emptyBtnText, { color: colors.primary }]}>Add Demo Account (568244)</Text>
-          </TouchableOpacity>
         </View>
       )}
 
-      {runtimes.map((r) => {
+      {manualRuntimes.map((r) => {
         const s = STATUS_UI(r.status);
         const isSelected = r.account.id === selectedId;
         return (

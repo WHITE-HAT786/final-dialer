@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/AuthContext";
 import { SipEngineProvider } from "@/src/sip/SipEngineContext";
+import SipAuthBridge from "@/src/sip/SipAuthBridge";
 import IncomingCallOverlay from "@/src/components/IncomingCallOverlay";
 
 LogBox.ignoreAllLogs(true);
@@ -30,6 +31,7 @@ export default function RootLayout() {
         <AuthProvider>
           <SipEngineProvider>
             <StatusBar barStyle="light-content" backgroundColor="#050B1A" />
+            <SipAuthBridge />
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#050B1A" } }} />
             <IncomingCallOverlay />
           </SipEngineProvider>
