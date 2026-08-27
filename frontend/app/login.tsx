@@ -9,19 +9,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
-import { colors, spacing } from "@/src/theme";
+import { colors } from "@/src/theme";
 import { useAuth } from "@/src/AuthContext";
+import { BrandMark } from "@/src/components/BrandMark";
 
 export default function Login() {
   const router = useRouter();
-  const { loginEmail, verify2fa, loginGoogleSession, user } = useAuth();
+  const { loginEmail, verify2fa, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -34,45 +32,6 @@ export default function Login() {
   useEffect(() => {
     if (user) router.replace("/(tabs)/dashboard");
   }, [user]);
-
-  // Handle cold-start deep link on mobile (session_id)
-  useEffect(() => {
-    (async () => {
-      if (Platform.OS === "web") {
-        const hash = (typeof window !== "undefined" && window.location.hash) || "";
-        const query = (typeof window !== "undefined" && window.location.search) || "";
-        const sid = parseSessionId(hash) || parseSessionId(query);
-        if (sid) {
-          try {
-            await loginGoogleSession(sid);
-            if (typeof window !== "undefined") {
-              window.history.replaceState(null, "", window.location.pathname);
-            }
-          } catch (e: any) {
-            setErr(e.message || "Google login failed");
-          }
-        }
-        return;
-      }
-      const initial = await Linking.getInitialURL();
-      const sid = initial ? parseSessionId(initial) : null;
-      if (sid) {
-        try {
-          await loginGoogleSession(sid);
-        } catch (e: any) {
-          setErr(e.message || "Google login failed");
-        }
-      }
-    })();
-  }, []);
-
-  function parseSessionId(url: string): string | null {
-    try {
-      const hashMatch = url.match(/session_id=([^&]+)/);
-      if (hashMatch) return decodeURIComponent(hashMatch[1]);
-    } catch {}
-    return null;
-  }
 
   const onEmailLogin = async () => {
     setErr(null);
@@ -112,39 +71,6 @@ export default function Login() {
     }
   };
 
-  const onGoogle = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      const redirect =
-        Platform.OS === "web"
-          ? (typeof window !== "undefined" ? window.location.origin + "/" : "/")
-          : Linking.createURL("");
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirect)}`;
-      if (Platform.OS === "web") {
-        if (typeof window !== "undefined") window.location.href = authUrl;
-        return;
-      }
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirect);
-      if (result.type !== "success" || !result.url) {
-        setBusy(false);
-        return;
-      }
-      const sid = parseSessionId(result.url);
-      if (!sid) {
-        setErr("Could not obtain session");
-        setBusy(false);
-        return;
-      }
-      await loginGoogleSession(sid);
-      router.replace("/(tabs)/dashboard");
-    } catch (e: any) {
-      setErr(e.message || "Google login failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.wrap} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
@@ -158,11 +84,8 @@ export default function Login() {
         >
           {/* Logo */}
           <View style={styles.brandCol}>
-            <View style={styles.logo}>
-              <MaterialCommunityIcons name="waveform" size={38} color="#fff" />
-            </View>
-            <Text style={styles.brand}>Depth Route</Text>
-            <Text style={styles.tagline}>Dialer</Text>
+            <BrandMark size={72} theme="dark" style={{ marginBottom: 16 }} />
+            <Text style={styles.brand}>Depth Route Dialer</Text>
             <Text style={styles.sub}>VoIP • SIP • SMS • Reports</Text>
           </View>
 
@@ -241,33 +164,12 @@ export default function Login() {
             </TouchableOpacity>
 
             {!twoFA && (
-              <>
-                <View style={styles.dividerRow}>
-                  <View style={styles.hair} />
-                  <Text style={styles.orText}>or continue with</Text>
-                  <View style={styles.hair} />
-                </View>
-
-                <TouchableOpacity
-                  style={styles.google}
-                  onPress={onGoogle}
-                  disabled={busy}
-                  testID="login-google-button"
-                >
-                  <Image
-                    source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }}
-                    style={{ width: 20, height: 20 }}
-                  />
-                  <Text style={styles.googleText}>Continue with Google</Text>
-                </TouchableOpacity>
-
-                <View style={styles.demoBox}>
-                  <Ionicons name="information-circle" size={16} color={colors.primary} />
-                  <Text style={styles.demoText}>
-                    Sign in with your Depth Route account
-                  </Text>
-                </View>
-              </>
+              <View style={styles.demoBox}>
+                <Ionicons name="information-circle" size={16} color={colors.primary} />
+                <Text style={styles.demoText}>
+                  Sign in with your Depth Route Dialer account
+                </Text>
+              </View>
             )}
           </View>
 

@@ -13,7 +13,6 @@ type AuthCtx = {
   /** Complete a 2FA login with the challenge from loginEmail + the user's code. */
   verify2fa: (challenge: string, code: string) => Promise<void>;
   registerEmail: (name: string, email: string, password: string) => Promise<void>;
-  loginGoogleSession: (sessionId: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -60,9 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerEmail = async () => {
     throw new Error("Accounts are provisioned by your administrator.");
   };
-  const loginGoogleSession = async () => {
-    throw new Error("Google sign-in isn't available in this build yet.");
-  };
 
   const logout = async () => {
     try { await authApi.logout(); } catch { /* revoke is best-effort */ }
@@ -72,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, loginEmail, verify2fa, registerEmail, loginGoogleSession, logout, refresh }}
+      value={{ user, loading, loginEmail, verify2fa, registerEmail, logout, refresh }}
     >
       {children}
     </AuthContext.Provider>
