@@ -9,14 +9,16 @@ import {
 } from "@/src/types";
 
 // ---------------------------------------------------------------------------
-// Base URL. EXPO_PUBLIC_BACKEND_URL points at the WebDialer origin (e.g.
-// https://staging.example.com). The app calls the real WebDialer endpoints
-// directly under /backend/... — there is no separate/mock backend.
+// Base URL — the WebDialer origin the app talks to (endpoints live under
+// /backend/api/app/*). Defaults to the production API host so a fresh clone
+// works with ZERO config; override via EXPO_PUBLIC_BACKEND_URL (.env or eas env)
+// to point at staging or another backend. There is no separate/mock backend.
 //
 // Only the ORIGIN is a public client var. HMAC secrets, the portal account
 // mapping, API keys and DB credentials are SERVER-ONLY and never shipped here.
 // ---------------------------------------------------------------------------
-const BASE = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
+const DEFAULT_BACKEND_URL = "https://api.depthroute.com";
+const BASE = (process.env.EXPO_PUBLIC_BACKEND_URL || DEFAULT_BACKEND_URL).replace(/\/+$/, "");
 export const APP_API = `${BASE}/backend/api/app`;
 export const AUTH_KEY = "auth_token";
 
