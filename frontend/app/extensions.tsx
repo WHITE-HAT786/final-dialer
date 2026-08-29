@@ -1,55 +1,67 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import React, { useMemo, useState } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import Screen from "@/src/components/Screen";
 import { colors } from "@/src/theme";
 import { apiGet } from "@/src/api";
-import { FourStatCard, SearchRow, StatusPill } from "@/src/components/ListUI";
+import { useApiData } from "@/src/hooks/useApiData";
+import { LoadingBlock, ErrorBlock, EmptyBlock } from "@/src/components/DataStates";
+import { SearchRow, StatusPill } from "@/src/components/ListUI";
+import { initials } from "@/src/utils/format";
+
+// Real shape of GET /backend/api/app/extensions (a bare array; no stats block).
+type Extension = {
+  id: number;
+  extension: string;
+  name: string;
+  device_type: string;      // 'web' | 'udp' | 'both'
+  caller_id: string | null;
+  enabled: boolean;
+};
+
+const ACCENT = ["#22C55E", "#3B82F6", "#A855F7", "#F59E0B", "#14B8A6", "#EC4899"];
 
 export default function Extensions() {
-  const [data, setData] = useState<any>(null);
+  const { data, loading, error, refresh, refreshing } = useApiData<Extension[]>(() => apiGet("/extensions"));
   const [q, setQ] = useState("");
-  useEffect(() => { apiGet("/extensions").then(setData); }, []);
-  const items = data ? data.items.filter((x: any) => !q || x.name.toLowerCase().includes(q.toLowerCase()) || x.ext.includes(q)) : [];
+
+  const items = useMemo(() => {
+    const list = data ?? [];
+    if (!q) return list;
+    const s = q.toLowerCase();
+    return list.filter((x) => x.name.toLowerCase().includes(s) || x.extension.includes(q) || (x.caller_id || "").includes(q));
+  }, [data, q]);
 
   return (
-    <Screen title="Extensions" activeKey="extensions" showSip={false} showBell={false}
-      right={<>
-        <TouchableOpacity><Ionicons name="search" size={22} color="#fff" /></TouchableOpacity>
-        <TouchableOpacity><Ionicons name="funnel-outline" size={20} color="#fff" /></TouchableOpacity>
-        <TouchableOpacity style={styles.addBtn}><Ionicons name="add" size={18} color="#fff" /></TouchableOpacity>
-      </>}
-    >
-      {!data ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
+    <Screen title="Extensions" activeKey="extensions" showSip={false} showBell={false} onRefresh={refresh} refreshing={refreshing}>
+      {loading ? (
+        <LoadingBlock />
+      ) : error ? (
+        <ErrorBlock message={error} onRetry={refresh} />
+      ) : (data?.length ?? 0) === 0 ? (
+        <EmptyBlock icon="people-outline" title="No extensions yet" subtitle="Your administrator assigns extensions to your account." />
+      ) : (
         <>
-          <FourStatCard stats={[
-            { label: "Total Extensions", value: data.stats.total, color: colors.primary, icon: "people", sub: "All Extensions" },
-            { label: "Active", value: data.stats.active, color: colors.green, icon: "checkmark-circle", percent: "75.0%" },
-            { label: "Inactive", value: data.stats.inactive, color: colors.yellow, icon: "pause-circle", percent: "17.9%" },
-            { label: "Disabled", value: data.stats.disabled, color: colors.red, icon: "close-circle", percent: "7.1%" },
-          ]} />
-          <SearchRow placeholder="Search by Extension, Name or Caller ID..." value={q} onChange={setQ}
-            right={<View style={styles.sortBox}><Text style={{ color: colors.textMuted, fontSize: 11 }}>Sort By</Text><Text style={{ color: "#fff", fontWeight: "600" }}>Extension ▾</Text></View>}
-          />
-          {items.map((s: any) => (
-            <View key={s.id} style={styles.row}>
-              <View style={[styles.avatar, { backgroundColor: s.color + "30" }]}>
-                <Text style={{ color: s.color, fontWeight: "700", fontSize: 12 }}>{s.name.split(" ").map((x: string) => x[0]).slice(0, 2).join("")}</Text>
+          <SearchRow placeholder="Search by extension, name or caller ID..." value={q} onChange={setQ} />
+          {items.map((s, i) => {
+            const color = ACCENT[i % ACCENT.length];
+            return (
+              <View key={s.id} style={styles.row} testID={`ext-${s.id}`}>
+                <View style={[styles.avatar, { backgroundColor: color + "30" }]}>
+                  <Text style={{ color, fontWeight: "700", fontSize: 12 }}>{initials(s.name || s.extension)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ext}>{s.extension}</Text>
+                  {s.name ? <Text style={styles.name}>{s.name}</Text> : null}
+                  {s.caller_id ? <Text style={styles.meta}>Caller ID: {s.caller_id}</Text> : null}
+                </View>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <StatusPill status={s.enabled ? "Active" : "Disabled"} />
+                  <Text style={styles.meta}>Device: {s.device_type.toUpperCase()}</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.ext}>{s.ext}</Text>
-                <Text style={styles.name}>{s.name}</Text>
-                <Text style={styles.meta}>{s.email}</Text>
-              </View>
-              <View style={{ alignItems: "flex-end", gap: 4 }}>
-                <StatusPill status={s.status} />
-                <Text style={styles.meta}>Device: {s.device}</Text>
-                <Text style={styles.meta}>{s.caller_id}</Text>
-              </View>
-              <TouchableOpacity style={styles.callBtn}><Ionicons name="call" size={16} color={colors.primary} /></TouchableOpacity>
-              <TouchableOpacity><Ionicons name="ellipsis-vertical" size={16} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-          ))}
+            );
+          })}
+          {items.length === 0 ? <Text style={styles.footer}>Nothing matches your search.</Text> : null}
         </>
       )}
     </Screen>
@@ -57,12 +69,10 @@ export default function Extensions() {
 }
 
 const styles = StyleSheet.create({
-  addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  sortBox: { paddingHorizontal: 10, justifyContent: "center", backgroundColor: colors.card, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   row: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, backgroundColor: colors.card, borderRadius: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border },
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   ext: { color: "#fff", fontWeight: "700", fontSize: 16 },
   name: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  callBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: colors.primaryDim, alignItems: "center", justifyContent: "center" },
+  footer: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: 16 },
 });

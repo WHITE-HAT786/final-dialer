@@ -1,101 +1,105 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
 import { colors } from "@/src/theme";
 import { apiGet } from "@/src/api";
-import { FourStatCard, SearchRow, StatusPill } from "@/src/components/ListUI";
+import { useApiData } from "@/src/hooks/useApiData";
+import { LoadingBlock, ErrorBlock, EmptyBlock } from "@/src/components/DataStates";
+import { StatusPill } from "@/src/components/ListUI";
+import { fmtDate, fmtMoney } from "@/src/utils/format";
 
-const PLAN_ICON: Record<string, any> = {
-  rocket: ["ion", "rocket"],
-  star: ["ion", "star"],
-  crown: ["mc", "crown"],
-  building: ["mc", "office-building"],
-  headset: ["ion", "headset"],
-  handshake: ["mc", "handshake"],
-  medal: ["mc", "medal"],
-  ban: ["mc", "cancel"],
+// Real shape of GET /backend/api/app/plans.
+type Plan = {
+  code: string;
+  name: string;
+  tagline: string | null;
+  price_monthly: string;
+  price_yearly: string;
+  max_sip_accounts: number | null;
+  max_extensions: number | null;
+  max_numbers: number | null;
+  minute_limit: number | null;
+  sms_limit: number | null;
+  is_popular: boolean;
+  status: string;
 };
+type CurrentSub = {
+  plan_name: string;
+  price: string;
+  billing_cycle: string | null;
+  status: string | null;
+  next_billing: string | null;
+};
+type PlansResponse = { plans: Plan[]; current: CurrentSub | null };
 
-const CAT_COLORS: Record<string, { bg: string; fg: string }> = {
-  Retail: { bg: colors.primaryDim, fg: colors.primary },
-  Wholesale: { bg: colors.tealDim, fg: colors.teal },
-  "Call Center": { bg: colors.purpleDim, fg: colors.purple },
-  Other: { bg: colors.card, fg: colors.textMuted },
-};
+function features(p: Plan): string[] {
+  const f: string[] = [];
+  if (p.minute_limit != null) f.push(`${p.minute_limit.toLocaleString()} min`);
+  if (p.max_extensions != null) f.push(`${p.max_extensions} ext`);
+  if (p.max_sip_accounts != null) f.push(`${p.max_sip_accounts} SIP`);
+  if (p.max_numbers != null) f.push(`${p.max_numbers} numbers`);
+  if (p.sms_limit != null) f.push(`${p.sms_limit.toLocaleString()} SMS`);
+  return f;
+}
 
 export default function Plans() {
-  const [data, setData] = useState<any>(null);
-  const [q, setQ] = useState("");
-  const [active, setActive] = useState("All Plans");
-  useEffect(() => { apiGet("/plans").then(setData); }, []);
-  const items = data ? data.items.filter((x: any) =>
-    (!q || x.name.toLowerCase().includes(q.toLowerCase())) &&
-    (active === "All Plans" || x.category === active)
-  ) : [];
+  const { data, loading, error, refresh, refreshing } = useApiData<PlansResponse>(() => apiGet("/plans"));
 
   return (
-    <Screen title="Plans" activeKey="plans" showSip={false} showBell={false}
-      right={<>
-        <TouchableOpacity><Ionicons name="search" size={22} color="#fff" /></TouchableOpacity>
-        <TouchableOpacity><Ionicons name="funnel-outline" size={20} color="#fff" /></TouchableOpacity>
-        <TouchableOpacity style={styles.addBtn}>
-          <Ionicons name="add" size={14} color="#fff" />
-          <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>Add Plan</Text>
-        </TouchableOpacity>
-      </>}
-    >
-      {!data ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
+    <Screen title="Plans" activeKey="plans" showSip={false} showBell={false} onRefresh={refresh} refreshing={refreshing}>
+      {loading ? (
+        <LoadingBlock />
+      ) : error ? (
+        <ErrorBlock message={error} onRetry={refresh} />
+      ) : (
         <>
-          <FourStatCard stats={[
-            { label: "Total Plans", value: data.stats.total, color: colors.primary, icon: "list", sub: "All Plans" },
-            { label: "Active Plans", value: data.stats.active, color: colors.green, icon: "checkmark-circle", percent: "71.4%" },
-            { label: "Inactive Plans", value: data.stats.inactive, color: colors.yellow, icon: "pause-circle", percent: "19.0%" },
-            { label: "Disabled Plans", value: data.stats.disabled, color: colors.red, icon: "close-circle", percent: "9.5%" },
-          ]} />
-          <SearchRow placeholder="Search by Plan Name or Type..." value={q} onChange={setQ}
-            right={<View style={styles.sortBox}><Text style={{ color: colors.textMuted, fontSize: 11 }}>Sort By</Text><Text style={{ color: "#fff", fontWeight: "600" }}>Plan Name ▾</Text></View>}
-          />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingVertical: 12 }}>
-            {["All Plans", "Retail", "Wholesale", "Call Center", "Other"].map(t => (
-              <TouchableOpacity key={t} onPress={() => setActive(t)}>
-                <Text style={[styles.chip, active === t && { color: colors.primary, borderBottomWidth: 2, borderBottomColor: colors.primary }]}>{t}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          {items.map((p: any) => {
-            const [family, iname] = PLAN_ICON[p.icon] || ["ion", "star"];
-            const cat = CAT_COLORS[p.category] || CAT_COLORS.Other;
-            return (
-              <View key={p.id} style={styles.row}>
-                <View style={[styles.icon, { backgroundColor: p.color + "30" }]}>
-                  {family === "mc" ? <MaterialCommunityIcons name={iname} size={22} color={p.color} /> : <Ionicons name={iname} size={22} color={p.color} />}
+          {/* Current subscription (real) */}
+          <Text style={styles.sectionTitle}>Your Plan</Text>
+          {data?.current ? (
+            <View style={styles.currentCard} testID="plan-current">
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={styles.currentIcon}><Ionicons name="ribbon" size={22} color={colors.primary} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.currentName}>{data.current.plan_name}</Text>
+                  <Text style={styles.meta}>
+                    {fmtMoney(data.current.price)}{data.current.billing_cycle ? ` / ${data.current.billing_cycle}` : ""}
+                  </Text>
                 </View>
+                {data.current.status ? <StatusPill status={data.current.status[0].toUpperCase() + data.current.status.slice(1)} /> : null}
+              </View>
+              {data.current.next_billing ? (
+                <Text style={[styles.meta, { marginTop: 8 }]}>Next billing: {fmtDate(data.current.next_billing)}</Text>
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.noPlan}><Text style={styles.meta}>No plan assigned.</Text></View>
+          )}
+
+          {/* Catalog (real, platform-wide) */}
+          <Text style={[styles.sectionTitle, { marginTop: 18 }]}>Available Plans</Text>
+          {(data?.plans.length ?? 0) === 0 ? (
+            <EmptyBlock icon="pricetags-outline" title="No plans available" />
+          ) : (
+            data!.plans.map((p) => (
+              <View key={p.code} style={styles.row} testID={`plan-${p.code}`}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     <Text style={styles.name}>{p.name}</Text>
-                    <View style={[styles.catPill, { backgroundColor: cat.bg }]}>
-                      <Text style={{ color: cat.fg, fontSize: 10, fontWeight: "700" }}>{p.category}</Text>
-                    </View>
+                    {p.is_popular ? (
+                      <View style={styles.popular}><Text style={styles.popularText}>Popular</Text></View>
+                    ) : null}
                   </View>
-                  <View style={{ flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                    <Text style={styles.meta}>{p.minutes}</Text>
-                    <Text style={styles.meta}>•</Text>
-                    <Text style={styles.meta}>{p.accounts}</Text>
-                    <Text style={styles.meta}>•</Text>
-                    <Text style={styles.meta}>{p.concurrent}</Text>
-                  </View>
-                  <Text style={styles.meta}>Created: {p.created}</Text>
+                  {p.tagline ? <Text style={styles.meta}>{p.tagline}</Text> : null}
+                  <Text style={styles.meta}>{features(p).join(" · ") || "—"}</Text>
                 </View>
-                <View style={{ alignItems: "flex-end", gap: 4 }}>
-                  <StatusPill status={p.status} />
-                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>${p.price.toFixed(2)}</Text>
-                  <Text style={styles.meta}>Monthly</Text>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.price}>{fmtMoney(p.price_monthly)}</Text>
+                  <Text style={styles.meta}>monthly</Text>
                 </View>
-                <TouchableOpacity><Ionicons name="ellipsis-vertical" size={16} color={colors.textMuted} /></TouchableOpacity>
               </View>
-            );
-          })}
+            ))
+          )}
         </>
       )}
     </Screen>
@@ -103,12 +107,15 @@ export default function Plans() {
 }
 
 const styles = StyleSheet.create({
-  addBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8 },
-  sortBox: { paddingHorizontal: 10, justifyContent: "center", backgroundColor: colors.card, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  chip: { color: colors.textMuted, fontSize: 13, paddingBottom: 6 },
+  sectionTitle: { color: colors.textDim, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginTop: 8, marginBottom: 8, marginLeft: 4 },
+  currentCard: { padding: 14, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.primary + "60" },
+  currentIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primaryDim, alignItems: "center", justifyContent: "center" },
+  currentName: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  noPlan: { padding: 16, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
   row: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, backgroundColor: colors.card, borderRadius: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border },
-  icon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   name: { color: "#fff", fontWeight: "700", fontSize: 14 },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  catPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  price: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  popular: { backgroundColor: colors.primaryDim, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  popularText: { color: colors.primary, fontSize: 10, fontWeight: "700" },
 });

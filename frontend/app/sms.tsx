@@ -1,172 +1,71 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "@/src/components/Screen";
 import { colors } from "@/src/theme";
 import { apiGet } from "@/src/api";
+import { useApiData } from "@/src/hooks/useApiData";
+import { LoadingBlock, ErrorBlock, EmptyBlock } from "@/src/components/DataStates";
+import { relTime } from "@/src/utils/format";
 
-const TABS = ["Compose", "History", "Templates", "Schedule"];
+// Real shape of GET /backend/api/app/sms. No compose/send: there is no send
+// endpoint in the app API, so no send UI is shown (no unsupported-write control).
+type SmsMessage = {
+  id: number;
+  direction: string | null;
+  from_number: string | null;
+  to_number: string | null;
+  body: string | null;
+  status: string | null;
+  created_at: string | null;
+};
+type SmsResponse = { items: SmsMessage[] };
+
+const cap = (s?: string | null) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 
 export default function SMS() {
-  const [data, setData] = useState<any>(null);
-  const [active, setActive] = useState("Compose");
-  const [to, setTo] = useState("");
-  const [msg, setMsg] = useState("");
-  useEffect(() => { apiGet("/sms").then(setData); }, []);
+  const { data, loading, error, refresh, refreshing } = useApiData<SmsResponse>(() => apiGet("/sms"));
 
   return (
-    <Screen title="SMS" activeKey="sms" showSip={false}>
-      {!data ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
-        <>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={[styles.icon, { backgroundColor: colors.primaryDim }]}>
-                <Ionicons name="chatbubble" size={16} color={colors.primary} />
+    <Screen title="SMS" activeKey="sms" showSip={false} onRefresh={refresh} refreshing={refreshing}>
+      {loading ? (
+        <LoadingBlock />
+      ) : error ? (
+        <ErrorBlock message={error} onRetry={refresh} />
+      ) : (data?.items.length ?? 0) === 0 ? (
+        <EmptyBlock icon="chatbubbles-outline" title="No messages" subtitle="SMS you send or receive will appear here." />
+      ) : (
+        data!.items.map((m) => {
+          const outbound = (m.direction || "").toLowerCase() === "outbound" || (m.direction || "").toLowerCase() === "outgoing";
+          const peer = outbound ? m.to_number : m.from_number;
+          return (
+            <View key={m.id} style={styles.row} testID={`sms-${m.id}`}>
+              <View style={[styles.avatar, { backgroundColor: outbound ? colors.primaryDim : colors.greenDim }]}>
+                <Ionicons name={outbound ? "arrow-up" : "arrow-down"} size={16} color={outbound ? colors.primary : colors.green} />
               </View>
-              <Text style={styles.statLabel}>Total Sent</Text>
-              <Text style={styles.statValue}>{data.stats.total_sent.toLocaleString()}</Text>
-              <Text style={styles.statSub}>This Month</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.number}>{peer || "Unknown"}</Text>
+                {m.body ? <Text style={styles.body} numberOfLines={2}>{m.body}</Text> : null}
+              </View>
+              <View style={{ alignItems: "flex-end", gap: 4 }}>
+                <Text style={styles.time}>{relTime(m.created_at)}</Text>
+                {m.status ? (
+                  <Text style={[styles.status, { color: m.status.toLowerCase() === "delivered" ? colors.green : colors.yellow }]}>{cap(m.status)}</Text>
+                ) : null}
+              </View>
             </View>
-            <View style={styles.statCard}>
-              <View style={[styles.icon, { backgroundColor: colors.greenDim }]}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.green} />
-              </View>
-              <Text style={styles.statLabel}>Delivered</Text>
-              <Text style={styles.statValue}>{data.stats.delivered.toLocaleString()}</Text>
-              <Text style={[styles.statSub, { color: colors.green }]}>{data.stats.delivery_rate}% Delivery Rate</Text>
-            </View>
-            <View style={styles.statCard}>
-              <View style={[styles.icon, { backgroundColor: colors.purpleDim }]}>
-                <Ionicons name="wallet" size={16} color={colors.purple} />
-              </View>
-              <Text style={styles.statLabel}>SMS Balance</Text>
-              <Text style={styles.statValue}>{data.stats.sms_balance.toLocaleString()}</Text>
-              <Text style={[styles.statSub, { color: colors.purple }]}>Credits</Text>
-            </View>
-          </View>
-
-          <View style={styles.tabsRow}>
-            {TABS.map((t) => (
-              <TouchableOpacity key={t} onPress={() => setActive(t)} style={styles.tab}>
-                <Text style={[styles.tabLabel, active === t && { color: colors.primary, fontWeight: "700" }]}>{t}</Text>
-                {active === t && <View style={styles.underline} />}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {active === "Compose" && (
-            <View style={styles.composeCard}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={styles.label}>To</Text>
-                <Text style={styles.charCount}>{to.length} / 1000</Text>
-              </View>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.inputFlex}
-                  placeholder="Enter number(s)"
-                  placeholderTextColor={colors.textDim}
-                  value={to}
-                  onChangeText={setTo}
-                  testID="sms-to"
-                />
-                <TouchableOpacity><Ionicons name="people" size={20} color={colors.textMuted} /></TouchableOpacity>
-              </View>
-
-              <Text style={[styles.label, { marginTop: 12 }]}>From (Sender ID)</Text>
-              <View style={styles.selectRow}>
-                <Text style={{ color: "#fff" }}>Depth Route</Text>
-                <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-              </View>
-
-              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 12 }}>
-                <Text style={styles.label}>Message</Text>
-                <Text style={styles.charCount}>{msg.length} / 160 | 1 SMS</Text>
-              </View>
-              <TextInput
-                style={[styles.inputFlex, { minHeight: 80, textAlignVertical: "top", padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10 }]}
-                placeholder="Type your message..."
-                placeholderTextColor={colors.textDim}
-                value={msg}
-                onChangeText={setMsg}
-                multiline
-                testID="sms-message"
-              />
-
-              <View style={styles.actionsRow}>
-                <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <Ionicons name="attach" size={16} color={colors.primary} />
-                  <Text style={{ color: colors.primary, fontSize: 13 }}>Attach</Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1 }} />
-                <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <Ionicons name="code" size={16} color={colors.primary} />
-                  <Text style={{ color: colors.primary, fontSize: 13 }}>Insert Template</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity style={styles.sendBtn} testID="sms-send">
-                <Ionicons name="paper-plane" size={16} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "700" }}>Send SMS</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.recentCard}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>Recent Messages</Text>
-              <Text style={{ color: colors.primary, fontSize: 13 }}>View All</Text>
-            </View>
-            {data.recent.map((m: any, i: number) => (
-              <View key={m.id} style={[styles.msgRow, i !== data.recent.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
-                <View style={[styles.msgAvatar, { backgroundColor: m.color + "40" }]}>
-                  <Text style={{ color: m.color, fontWeight: "700", fontSize: 12 }}>+1</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>{m.number}</Text>
-                  <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>{m.message}</Text>
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 4 }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 11 }}>{m.time}</Text>
-                  <View style={[styles.statusPill, { backgroundColor: m.status === "Delivered" ? colors.greenDim : colors.yellowDim }]}>
-                    <Text style={{ color: m.status === "Delivered" ? colors.green : colors.yellow, fontSize: 10, fontWeight: "700" }}>{m.status}</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-              </View>
-            ))}
-          </View>
-
-          <TouchableOpacity style={styles.fab} testID="sms-fab">
-            <Ionicons name="add" size={26} color="#fff" />
-          </TouchableOpacity>
-        </>
+          );
+        })
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  statsRow: { flexDirection: "row", gap: 8, marginTop: 8 },
-  statCard: { flex: 1, padding: 10, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  icon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  statLabel: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
-  statValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginTop: 2 },
-  statSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
-  tabsRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border, marginTop: 14 },
-  tab: { paddingVertical: 12, paddingHorizontal: 16, position: "relative" },
-  tabLabel: { color: colors.textMuted, fontSize: 14 },
-  underline: { position: "absolute", bottom: -1, left: 16, right: 16, height: 2, backgroundColor: colors.primary },
-  composeCard: { padding: 14, backgroundColor: colors.card, borderRadius: 14, marginTop: 14, borderWidth: 1, borderColor: colors.border },
-  label: { color: colors.textMuted, fontSize: 12 },
-  charCount: { color: colors.textDim, fontSize: 11 },
-  inputRow: { flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 8 },
-  inputFlex: { flex: 1, color: "#fff", fontSize: 14 },
-  selectRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10, marginTop: 6 },
-  actionsRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
-  sendBtn: { alignSelf: "flex-end", flexDirection: "row", gap: 8, backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, marginTop: 12, alignItems: "center" },
-  recentCard: { padding: 14, backgroundColor: colors.card, borderRadius: 14, marginTop: 14, borderWidth: 1, borderColor: colors.border },
-  msgRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-  msgAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  statusPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  fab: { position: "absolute", bottom: 90, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: colors.card, borderRadius: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border },
+  avatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  number: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  body: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  time: { color: colors.textMuted, fontSize: 11 },
+  status: { fontSize: 10, fontWeight: "700" },
 });

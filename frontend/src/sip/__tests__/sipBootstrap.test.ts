@@ -16,8 +16,8 @@ import {
 test("mapSipConfig: maps a full backend response to a registrable UDP account", () => {
   const acc = mapSipConfig({
     transport: "UDP",
-    server: "sip.depthroute.com",
-    domain: "sip.depthroute.com",
+    server: "dialer.depthroute.com",
+    domain: "dialer.depthroute.com",
     port: 5060,
     username: "dev7001",
     auth_username: "dev7001",
@@ -30,7 +30,7 @@ test("mapSipConfig: maps a full backend response to a registrable UDP account", 
   assert.equal(acc.username, "dev7001");
   assert.equal(acc.authUser, "dev7001");
   assert.equal(acc.password, "s3cr3t");
-  assert.equal(acc.host, "sip.depthroute.com");
+  assert.equal(acc.host, "dialer.depthroute.com");
   assert.equal(acc.port, 5060);
   assert.equal(acc.outboundProxy, "sip:proxy.depthroute.com");
   assert.equal(acc.registerExpires, 120);

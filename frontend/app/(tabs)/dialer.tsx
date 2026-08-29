@@ -65,30 +65,38 @@ export default function Dialer() {
       default: return colors.textMuted;
     }
   };
-  const selColor = usingPrimary
-    ? bootColor(bootstrap)
-    : (() => {
-        switch (selectedRuntime?.status) {
-          case "registered": return colors.green;
-          case "connecting": return colors.yellow;
-          case "registration_failed": return colors.red;
-          default: return selectedAccount?.color || colors.textMuted;
-        }
-      })();
-  const selStatusLabel = usingPrimary
-    ? sipBootstrapLabel(bootstrap)
-    : (() => {
-        switch (selectedRuntime?.status) {
-          case "registered": return "Registered";
-          case "connecting": return "Connecting…";
-          case "registration_failed": return "Registration Failed";
-          case "unsupported": return "Unsupported";
-          case "error": return "Error";
-          case "unregistered": return "Unregistered";
-          default: return runtimes.length === 0 ? "No SIP account" : "Disconnected";
-        }
-      })();
-  const showRetry = usingPrimary && isRetryable(bootstrap);
+  // For the primary line, trust the engine's LIVE status once it is actually
+  // running (registered/connecting/failed/unregistered) — the same source the
+  // Dashboard and Header use — so the three views never disagree. Fall back to
+  // the `bootstrap` phase only before the engine reports (loading / no_extension
+  // / needs_provision / unavailable), where it carries the real information.
+  const engineStatus = selectedRuntime?.status;
+  const engineIsLive =
+    engineStatus === "registered" || engineStatus === "connecting" ||
+    engineStatus === "registration_failed" || engineStatus === "unregistered";
+  const useBoot = usingPrimary && !engineIsLive;
+  const engineColor = (): string => {
+    switch (engineStatus) {
+      case "registered": return colors.green;
+      case "connecting": return colors.yellow;
+      case "registration_failed": return colors.red;
+      default: return selectedAccount?.color || colors.textMuted;
+    }
+  };
+  const engineLabel = (): string => {
+    switch (engineStatus) {
+      case "registered": return "Registered";
+      case "connecting": return "Connecting…";
+      case "registration_failed": return "Registration Failed";
+      case "unsupported": return "Unsupported";
+      case "error": return "Error";
+      case "unregistered": return "Unregistered";
+      default: return runtimes.length === 0 ? "No SIP account" : "Disconnected";
+    }
+  };
+  const selColor = useBoot ? bootColor(bootstrap) : engineColor();
+  const selStatusLabel = useBoot ? sipBootstrapLabel(bootstrap) : engineLabel();
+  const showRetry = useBoot && isRetryable(bootstrap);
 
   const press = (k: string) => {
     Haptics.selectionAsync().catch(() => {});

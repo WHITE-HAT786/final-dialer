@@ -21,8 +21,8 @@ const SECTIONS: { title: string; items: Row[] }[] = [
   {
     title: "COMMUNICATION",
     items: [
-      { key: "voicemails", label: "Voicemails", icon: "voicemail", family: "mc", route: "/voicemails", color: colors.purple, bg: colors.purpleDim, badge: "5" },
-      { key: "sms", label: "SMS", icon: "chatbubble", route: "/sms", color: colors.primary, bg: colors.primaryDim, badge: "New" },
+      { key: "voicemails", label: "Voicemails", icon: "voicemail", family: "mc", route: "/voicemails", color: colors.purple, bg: colors.purpleDim },
+      { key: "sms", label: "SMS", icon: "chatbubble", route: "/sms", color: colors.primary, bg: colors.primaryDim },
       { key: "recordings", label: "Recordings", icon: "mic", route: "/recordings", color: colors.teal, bg: colors.tealDim },
     ],
   },
@@ -43,7 +43,7 @@ const SECTIONS: { title: string; items: Row[] }[] = [
     title: "ACCOUNT",
     items: [
       { key: "profile", label: "User Profile", icon: "person", route: "/profile", color: colors.primary, bg: colors.primaryDim },
-      { key: "notifications", label: "Notifications", icon: "notifications", route: "/notifications", color: colors.red, bg: colors.redDim, badge: "3" },
+      { key: "notifications", label: "Notifications", icon: "notifications", route: "/notifications", color: colors.red, bg: colors.redDim },
       { key: "support", label: "Help & Support", icon: "help-circle", route: "/support", color: colors.green, bg: colors.greenDim },
     ],
   },
@@ -78,16 +78,15 @@ export default function More() {
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{user?.name}</Text>
           <Text style={styles.profileEmail}>{user?.email}</Text>
-          <View style={styles.badgeRow}>
-            <View style={[styles.rolePill, { backgroundColor: colors.primaryDim }]}>
-              <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>
-                {user?.role}
-              </Text>
+          {user?.role ? (
+            <View style={styles.badgeRow}>
+              <View style={[styles.rolePill, { backgroundColor: colors.primaryDim }]}>
+                <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>
+                  {user.role}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.rolePill, { backgroundColor: colors.greenDim }]}>
-              <Text style={{ color: colors.green, fontSize: 11, fontWeight: "700" }}>Active</Text>
-            </View>
-          </View>
+          ) : null}
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       </TouchableOpacity>

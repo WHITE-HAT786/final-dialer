@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   ScrollView,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -16,6 +15,14 @@ import { useAuth } from "@/src/AuthContext";
 import { useBalance } from "@/src/hooks/useBalance";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
+import { LoadingBlock, ErrorBlock } from "@/src/components/DataStates";
+import { fmtDate, fmtTime, fmtDuration } from "@/src/utils/format";
+
+// Backend quick_stats.color is a keyword, not a hex — map it to the theme.
+const QCOLOR: Record<string, string> = {
+  primary: colors.primary, green: colors.green, purple: colors.purple,
+  yellow: colors.yellow, red: colors.red, teal: colors.teal,
+};
 
 const iconFor = (type: string) => {
   if (type === "outgoing") return { name: "call-sharp", rot: -45, color: colors.green, bg: colors.greenDim };
@@ -43,6 +50,7 @@ export default function Dashboard() {
   const { selectedAccount, selectedRuntime, runtimes } = useMultiSip();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sipPicker, setSipPicker] = useState(false);
 
@@ -66,9 +74,12 @@ export default function Dashboard() {
   };
 
   const load = async () => {
+    setErr(null);
     try {
       const d = await apiGet("/dashboard");
       setData(d);
+    } catch (e: any) {
+      setErr(e?.message || "Couldn't load your dashboard.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -83,12 +94,17 @@ export default function Dashboard() {
     await load();
   };
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <Screen title="Depth Route" activeKey="dashboard" showBell={false} showSip={false}>
-        <View style={{ marginTop: 60, alignItems: "center" }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingBlock />
+      </Screen>
+    );
+  }
+  if (err || !data) {
+    return (
+      <Screen title="Depth Route" activeKey="dashboard" showBell={false} showSip={false}>
+        <ErrorBlock message={err} onRetry={() => { setLoading(true); load(); }} />
       </Screen>
     );
   }
@@ -195,7 +211,7 @@ export default function Dashboard() {
           </View>
           <Text style={styles.tinyLabel}>Current Plan</Text>
           <Text style={styles.planName} numberOfLines={1}>{data.plan.name}</Text>
-          <Text style={styles.moneySub}>Valid till {data.plan.valid_till}</Text>
+          <Text style={styles.moneySub}>{data.plan.valid_till ? `Valid till ${fmtDate(data.plan.valid_till)}` : "—"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -215,17 +231,7 @@ export default function Dashboard() {
               </View>
               <Text style={styles.statLabel}>{s.label}</Text>
               <Text style={styles.statValue}>{s.value}</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                <Ionicons
-                  name={s.positive ? "arrow-up" : "arrow-down"}
-                  size={11}
-                  color={s.positive ? colors.green : colors.red}
-                />
-                <Text style={[styles.statChange, { color: s.positive ? colors.green : colors.red }]}>
-                  {s.change}
-                </Text>
-                <Text style={styles.statSub}>vs last 7 days</Text>
-              </View>
+              <Text style={styles.statSub}>Today</Text>
             </View>
           );
         })}
@@ -324,8 +330,8 @@ export default function Dashboard() {
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.callTime}>{c.time}</Text>
-                <Text style={[styles.callDur, { color: durColor }]}>{c.duration}</Text>
+                <Text style={styles.callTime}>{fmtTime(c.time)}</Text>
+                <Text style={[styles.callDur, { color: durColor }]}>{fmtDuration(c.duration)}</Text>
               </View>
               <TouchableOpacity
                 style={styles.infoBtn}
@@ -341,20 +347,22 @@ export default function Dashboard() {
 
       {/* Quick stats bottom */}
       <View style={styles.bottomStatsRow}>
-        {data.quick_stats.map((q: any, i: number) => (
-          <View key={i} style={styles.bottomStat} testID={`quick-stat-${i}`}>
-            <View style={[styles.miniIcon, { backgroundColor: q.color + "20", marginBottom: 8 }]}>
-              {q.icon === "voicemail" ? (
-                <MaterialCommunityIcons name="voicemail" size={16} color={q.color} />
-              ) : (
-                <Ionicons name={q.icon} size={16} color={q.color} />
-              )}
+        {data.quick_stats.map((q: any, i: number) => {
+          const qc = QCOLOR[q.color] || colors.primary;
+          return (
+            <View key={i} style={styles.bottomStat} testID={`quick-stat-${i}`}>
+              <View style={[styles.miniIcon, { backgroundColor: qc + "20", marginBottom: 8 }]}>
+                {q.icon === "voicemail" ? (
+                  <MaterialCommunityIcons name="voicemail" size={16} color={qc} />
+                ) : (
+                  <Ionicons name={q.icon} size={16} color={qc} />
+                )}
+              </View>
+              <Text style={styles.bottomStatLabel}>{q.label}</Text>
+              <Text style={styles.bottomStatValue}>{q.value}</Text>
             </View>
-            <Text style={styles.bottomStatLabel}>{q.label}</Text>
-            <Text style={styles.bottomStatValue}>{q.value}</Text>
-            <Text style={[styles.bottomStatSub, { color: q.color }]}>{q.sub}</Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
       <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} />
     </Screen>

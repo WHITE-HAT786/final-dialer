@@ -12,6 +12,8 @@ type AuthCtx = {
   loginEmail: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
   /** Complete a 2FA login with the challenge from loginEmail + the user's code. */
   verify2fa: (challenge: string, code: string) => Promise<void>;
+  /** Google sign-in: exchange a verified Google ID token (+ nonce) for an app session. */
+  loginGoogle: (idToken: string, nonce: string) => Promise<void>;
   registerEmail: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -55,6 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await persist(token, u);
   };
 
+  const loginGoogle = async (idToken: string, nonce: string) => {
+    const { token, user: u } = await authApi.google(idToken, nonce);
+    await persist(token, u);
+  };
+
   // Not part of the customer softphone flow — surfaced honestly rather than faked.
   const registerEmail = async () => {
     throw new Error("Accounts are provisioned by your administrator.");
@@ -68,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, loginEmail, verify2fa, registerEmail, logout, refresh }}
+      value={{ user, loading, loginEmail, verify2fa, loginGoogle, registerEmail, logout, refresh }}
     >
       {children}
     </AuthContext.Provider>

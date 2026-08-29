@@ -15,6 +15,10 @@ import java.util.concurrent.ConcurrentHashMap
 class ExpoPjsipModule : Module() {
   private var ep: Endpoint? = null
   private var account: SipAccount? = null
+  // Identity (sip:user@server:port) the current account was created for. Used to
+  // make initialize() idempotent so a repeated connect for the SAME line does not
+  // destroy + recreate the account (which caused register/unregister churn).
+  private var currentIdUri: String? = null
   // Shared between the JS async thread and pjsua callback threads -> thread-safe.
   private val calls = ConcurrentHashMap<String, SipCall>()
 
@@ -32,6 +36,7 @@ class ExpoPjsipModule : Module() {
       calls.clear()
       account?.delete(); account = null
       ep?.libDestroy(); ep?.delete(); ep = null
+      currentIdUri = null
     } catch (_: Throwable) {}
   }
 
@@ -44,7 +49,22 @@ class ExpoPjsipModule : Module() {
 
     AsyncFunction("initialize") { config: Map<String, Any?> ->
       try {
-        if (ep != null) tearDown()   // guard against double-initialize (would crash pjsua)
+        val server = config["server"] as? String ?: ""
+        val username = config["username"] as? String ?: ""
+        val portNum = ((config["port"] as? Number)?.toInt()) ?: 5060
+        val newIdUri = "sip:$username@$server:$portNum"
+
+        // IDEMPOTENT: if the SAME line is already up and registered/registering,
+        // do NOT tear the stack down and rebuild it — that produced
+        // REGISTER -> unregister -> account=null churn. Reuse it (re-register if
+        // it had dropped) and return.
+        if (ep != null && account != null && currentIdUri == newIdUri) {
+          val st = account?.currentRegState
+          if (st == "registered" || st == "registering") return@AsyncFunction
+          try { account?.setRegistration(true); return@AsyncFunction } catch (_: Throwable) {}
+        }
+
+        if (ep != null) tearDown()   // different identity / dead stack -> rebuild
         System.loadLibrary("pjsua2")
         val e = Endpoint()
         e.libCreate()
@@ -54,21 +74,18 @@ class ExpoPjsipModule : Module() {
 
         // UDP transport (SIP over UDP).
         val tCfg = TransportConfig()
-        val portNum = ((config["port"] as? Number)?.toInt()) ?: 5060
         // 0 = ephemeral local port; the remote registrar port is set on the account URI.
         tCfg.port = 0
         e.transportCreate(pjsip_transport_type_e.PJSIP_TRANSPORT_UDP, tCfg)
         e.libStart()
 
-        val server = config["server"] as? String ?: ""
-        val username = config["username"] as? String ?: ""
         val authUser = config["authUsername"] as? String ?: username
         val password = config["password"] as? String ?: ""
         val proxy = config["outboundProxy"] as? String
         val expires = ((config["registerExpires"] as? Number)?.toInt()) ?: 300
 
         val accCfg = AccountConfig()
-        accCfg.idUri = "sip:$username@$server:$portNum"
+        accCfg.idUri = newIdUri
         accCfg.regConfig.registrarUri = "sip:$server:$portNum;transport=udp"
         accCfg.regConfig.timeoutSec = expires.toLong()
         if (!proxy.isNullOrEmpty()) accCfg.sipConfig.proxies.add(proxy)
@@ -83,6 +100,7 @@ class ExpoPjsipModule : Module() {
         acc.create(accCfg, false)
         this@ExpoPjsipModule.ep = e
         this@ExpoPjsipModule.account = acc
+        this@ExpoPjsipModule.currentIdUri = newIdUri
       } catch (t: Throwable) {
         emitError("INIT_FAILED", t.message ?: "initialize failed")
         throw t

@@ -36,7 +36,17 @@ class SipForegroundService : Service() {
       .setContentText("SIP registered")
       .setSmallIcon(android.R.drawable.stat_sys_phone_call)
       .build()
-    startForeground(NOTIF_ID, n)
-    return START_STICKY
+    // On Android 14+ a `microphone` foreground service can only be started when
+    // RECORD_AUDIO is granted AND the app is in an eligible state; otherwise
+    // startForeground throws SecurityException. NEVER let that crash the whole
+    // app — registration/calling must still work in the foreground even without
+    // the background keep-alive service. If it can't start, just stop the service.
+    try {
+      startForeground(NOTIF_ID, n)
+      return START_STICKY
+    } catch (t: Throwable) {
+      try { stopSelf() } catch (_: Throwable) {}
+      return START_NOT_STICKY
+    }
   }
 }

@@ -19,7 +19,8 @@
         "backgroundColor": "#050B1A"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.depthroute.dialer"
+      "package": "com.depthroute.dialer",
+      "versionCode": 20260836
     },
     "web": {
       "bundler": "metro",

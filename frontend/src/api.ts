@@ -133,6 +133,17 @@ export const authApi = {
   },
   me(): Promise<AuthUser> { return apiGet<AuthUser>(`${APP_API}/me.php`); },
   logout(): Promise<null> { return apiPost<null>(`${APP_API}/logout.php`, {}); },
+  /**
+   * Google sign-in: exchange a Google ID token (+ the nonce it was minted with)
+   * for the SAME app session a password login yields. The backend verifies the
+   * token (sig/iss/aud/exp/nonce) and resolves an EXISTING linked identity — the
+   * app never sends an email/uid, and no client_secret is ever shipped here.
+   */
+  async google(idToken: string, nonce: string): Promise<{ token: string; user: AuthUser }> {
+    const d = await apiPost<{ token: string; user: AuthUser }>(
+      `${APP_API}/google.php`, { id_token: idToken, nonce }, false);
+    return { token: d.token, user: d.user };
+  },
 };
 
 export const walletApi = {

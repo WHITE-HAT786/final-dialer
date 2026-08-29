@@ -13,13 +13,19 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { colors } from "@/src/theme";
 import { useAuth } from "@/src/AuthContext";
 import { BrandMark } from "@/src/components/BrandMark";
+import { GoogleSignInButton, googleNativeConfigured } from "@/src/components/GoogleSignInButton";
+
+// The web password-reset lives on the portal; the app opens it in a browser
+// rather than duplicating a reset flow the app API does not expose.
+const FORGOT_PASSWORD_URL = "https://depthroute.com/login";
 
 export default function Login() {
   const router = useRouter();
-  const { loginEmail, verify2fa, user } = useAuth();
+  const { loginEmail, verify2fa, loginGoogle, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -32,6 +38,19 @@ export default function Login() {
   useEffect(() => {
     if (user) router.replace("/(tabs)/dashboard");
   }, [user]);
+
+  // --- Google sign-in ---
+  // The Google OAuth hook lives in <GoogleSignInButton>, which is only mounted
+  // when a native Android client id is configured (expo-auth-session throws on
+  // Android otherwise). This callback receives the verified id token + nonce.
+  const handleGoogleToken = (idToken: string, nonce: string) => {
+    setErr(null);
+    setBusy(true);
+    loginGoogle(idToken, nonce)
+      .then(() => router.replace("/(tabs)/dashboard"))
+      .catch((e: any) => setErr(e?.message || "Google sign-in failed."))
+      .finally(() => setBusy(false));
+  };
 
   const onEmailLogin = async () => {
     setErr(null);
@@ -69,6 +88,15 @@ export default function Login() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const onForgot = () => { WebBrowser.openBrowserAsync(FORGOT_PASSWORD_URL).catch(() => {}); };
+  // Honest fallback when this build has no native Android Google client id:
+  // show the button but say so instead of faking a session or crashing.
+  // Real flow (when configured): <GoogleSignInButton> -> Google ID token
+  // (+nonce) -> POST /backend/api/app/google.php -> app session.
+  const onGoogleUnavailable = () => {
+    setErr("Google sign-in isn't configured for this build yet.");
   };
 
   return (
@@ -128,6 +156,12 @@ export default function Login() {
               </TouchableOpacity>
             </View>
 
+            {!twoFA && (
+              <TouchableOpacity onPress={onForgot} style={{ alignSelf: "flex-end", marginBottom: 8 }} testID="login-forgot">
+                <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>Forgot password?</Text>
+              </TouchableOpacity>
+            )}
+
             {twoFA && (
               <View style={styles.field}>
                 <Ionicons name="shield-checkmark-outline" size={18} color={colors.textMuted} />
@@ -164,12 +198,21 @@ export default function Login() {
             </TouchableOpacity>
 
             {!twoFA && (
-              <View style={styles.demoBox}>
-                <Ionicons name="information-circle" size={16} color={colors.primary} />
-                <Text style={styles.demoText}>
-                  Sign in with your Depth Route Dialer account
-                </Text>
-              </View>
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.hair} />
+                  <Text style={styles.orText}>or</Text>
+                  <View style={styles.hair} />
+                </View>
+                {googleNativeConfigured ? (
+                  <GoogleSignInButton onToken={handleGoogleToken} onError={setErr} disabled={busy} />
+                ) : (
+                  <TouchableOpacity style={styles.google} onPress={onGoogleUnavailable} testID="login-google">
+                    <Ionicons name="logo-google" size={18} color="#0F1A30" />
+                    <Text style={styles.googleText}>Continue with Google</Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </View>
 

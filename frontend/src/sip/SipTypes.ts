@@ -5,7 +5,7 @@ export type SipConfig = {
   displayName: string;
   username: string; // SIP auth username (the extension / endpoint)
   password: string;
-  domain: string; // e.g. sip.depthroute.com
+  domain: string; // e.g. dialer.depthroute.com
   registerExpires?: number;
   // Native SIP/UDP fields (from GET /api/app/sip-config.php).
   server?: string; // registrar host (defaults to domain)

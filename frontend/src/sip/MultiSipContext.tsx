@@ -3,7 +3,20 @@
 // SIP over UDP). Persists accounts to secure storage. Selected account drives
 // outgoing calls. The WebRTC/JsSIP engine is no longer on the calling path.
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { AppState, PermissionsAndroid, Platform } from "react-native";
 import { storage } from "@/src/utils/storage";
+
+// RECORD_AUDIO is required both to capture mic audio for RTP AND to start the
+// `microphone` foreground service (Android 14+ throws SecurityException without
+// it). Request it before we register so the call path and the keep-alive service
+// have it. Best-effort: a denial must not crash or block registration.
+async function ensureMicPermission(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  try {
+    const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+    if (!granted) await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+  } catch { /* best effort */ }
+}
 import { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipTypes";
 import { NativeSipEngine } from "./NativeSipEngine";
 import { isPjsipAvailable } from "@/modules/expo-pjsip";
@@ -268,6 +281,7 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
       return;
     }
     setBootstrap("registering");
+    await ensureMicPermission(); // mic for RTP + the microphone foreground service
     const eng = ensureEngine(primary);
     await eng.connect(toConfig(primary)); // engine drives status from here (effect below)
   }, [ensureEngine]);
@@ -303,17 +317,34 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
     });
   }, [tick, engines]);
 
+  // Recover registrations when the app returns to the foreground (or the network
+  // comes back). The native PJSIP stack can be torn down while backgrounded
+  // (Expo OnDestroy) — reconcile() re-checks the REAL native state and re-registers
+  // if needed, so we never sit in a stale "registered" with a dead account.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s !== "active") return;
+      engines.forEach((eng) => { void eng.reconcile(); });
+    });
+    return () => sub.remove();
+  }, [engines]);
+
   const call: Ctx["call"] = useCallback(async (target, accId) => {
     const id = accId || selectedId;
     if (!id) return { callId: null, accountId: null, error: "No SIP account selected. Add one in SIP Accounts." };
     const a = accounts.find((x) => x.id === id);
     if (!a) return { callId: null, accountId: null, error: "SIP account not found" };
     const eng = ensureEngine(a);
-    if (eng.getStatus() !== "registered") {
-      return { callId: null, accountId: id, error: `Account "${a.displayName || a.username}" is not registered (${eng.getStatus()}). Fix in SIP Accounts.` };
-    }
+    // Do NOT gate on the (possibly stale) JS status. eng.call() verifies the REAL
+    // native registration and re-registers if the account was torn down, so we
+    // never fail on a stale "registered" nor block a recoverable line.
     const callId = await eng.call(target);
-    if (!callId) return { callId: null, accountId: id, error: "Failed to start call — see log" };
+    if (!callId) {
+      return {
+        callId: null, accountId: id,
+        error: `"${a.displayName || a.username}" isn't registered and couldn't reconnect to ${a.host || a.domain}. Check your connection and try again.`,
+      };
+    }
     return { callId, accountId: id };
   }, [accounts, ensureEngine, selectedId]);
 
