@@ -4,25 +4,22 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   TextInput,
   Modal,
   Pressable,
   FlatList,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Screen from "@/src/components/Screen";
-import { colors, spacing } from "@/src/theme";
+import { cardShadow, CONTROL_H, useTheme, useThemedStyles, type Palette } from "@/src/theme";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
-import { sipBootstrapLabel, isRetryable, SipBootstrapState } from "@/src/sip/sipBootstrap";
 import SipPickerSheet from "@/src/components/SipPickerSheet";
 import { COUNTRIES, DEFAULT_COUNTRY } from "@/src/data/countries";
 
-const KEYS = [
-  ["1", "voicemail"],
+const KEYS: [string, string][] = [
+  ["1", ""],
   ["2", "ABC"],
   ["3", "DEF"],
   ["4", "GHI"],
@@ -36,9 +33,18 @@ const KEYS = [
   ["#", ""],
 ];
 
+const TABS = [
+  { label: "Keypad", route: null },
+  { label: "Contacts", route: "/(tabs)/contacts" },
+  { label: "Recents", route: "/(tabs)/call-logs" },
+  { label: "More", route: "/(tabs)/more" },
+];
+
 export default function Dialer() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
-  const { selectedAccount, selectedRuntime, runtimes, call, bootstrap, retryBootstrap } = useMultiSip();
+  const { selectedAccount, selectedRuntime, runtimes, call } = useMultiSip();
   const [num, setNum] = useState("");
   const [sipPicker, setSipPicker] = useState(false);
   const [countryPicker, setCountryPicker] = useState(false);
@@ -46,49 +52,18 @@ export default function Dialer() {
   const [countrySearch, setCountrySearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const registered = selectedRuntime?.status === "registered";
   const selName = selectedAccount?.displayName || selectedAccount?.username || "No SIP account";
-  const selDid = selectedAccount?.callerId || (selectedAccount ? `${selectedAccount.username}@${selectedAccount.domain}` : "Tap to add");
-  const selHost = selectedAccount?.host || selectedAccount?.domain || "";
-  // The customer's own backend line (ephemeral/primary) reports the bootstrap
-  // state; a manually-added account reports its engine status.
-  const usingPrimary = !selectedAccount || !!selectedAccount.ephemeral;
-  const bootColor = (s: SipBootstrapState): string => {
-    switch (s) {
-      case "registered": return colors.green;
-      case "loading":
-      case "registering": return colors.yellow;
-      case "no_extension":
-      case "needs_provision": return colors.orange;
-      case "unavailable":
-      case "registration_failed":
-      case "error": return colors.red;
-      default: return colors.textMuted;
-    }
-  };
-  const selColor = usingPrimary
-    ? bootColor(bootstrap)
-    : (() => {
-        switch (selectedRuntime?.status) {
-          case "registered": return colors.green;
-          case "connecting": return colors.yellow;
-          case "registration_failed": return colors.red;
-          default: return selectedAccount?.color || colors.textMuted;
-        }
-      })();
-  const selStatusLabel = usingPrimary
-    ? sipBootstrapLabel(bootstrap)
-    : (() => {
-        switch (selectedRuntime?.status) {
-          case "registered": return "Registered";
-          case "connecting": return "Connecting…";
-          case "registration_failed": return "Registration Failed";
-          case "unsupported": return "Unsupported";
-          case "error": return "Error";
-          case "unregistered": return "Unregistered";
-          default: return runtimes.length === 0 ? "No SIP account" : "Disconnected";
-        }
-      })();
-  const showRetry = usingPrimary && isRetryable(bootstrap);
+  const selDid =
+    selectedAccount?.callerId ||
+    (selectedAccount ? `${selectedAccount.username}@${selectedAccount.domain}` : "Tap to add");
+  const selHost = selectedAccount?.domain || selectedAccount?.wssUrl || "—";
+
+  const lineTone = registered
+    ? { fg: c.success, bg: c.successSoft }
+    : selectedRuntime?.status === "registration_failed"
+      ? { fg: c.danger, bg: c.dangerSoft }
+      : { fg: c.muted, bg: c.card };
 
   const press = (k: string) => {
     Haptics.selectionAsync().catch(() => {});
@@ -102,7 +77,10 @@ export default function Dialer() {
 
   const startCall = async () => {
     setError(null);
-    if (!num.trim()) { setError("Enter a number first"); return; }
+    if (!num.trim()) {
+      setError("Enter a number first");
+      return;
+    }
     if (!selectedAccount) {
       setError("No SIP account selected — add one first");
       return;
@@ -117,172 +95,184 @@ export default function Dialer() {
       setError(res.error);
       return;
     }
-    router.push({ pathname: "/call", params: { number: fullNumber, name: "Unknown", callId: res.callId || "", accountId: res.accountId || "" } });
+    router.push({
+      pathname: "/call",
+      params: {
+        number: fullNumber,
+        name: "Unknown",
+        callId: res.callId || "",
+        accountId: res.accountId || "",
+      },
+    });
   };
+
+  const inCallActions = [
+    { label: "Transfer", icon: "swap-horizontal" as const, fg: c.success, bg: c.successSoft },
+    { label: "Hold", icon: "pause" as const, fg: c.warn, bg: c.warnSoft },
+    { label: "Mute", icon: "mic-off" as const, fg: c.purple, bg: c.purpleSoft },
+    { label: "Hang up", icon: "close" as const, fg: c.danger, bg: c.dangerSoft },
+  ];
 
   return (
     <Screen title="Dialer" activeKey="dialer">
-      {/* Active SIP account */}
-      <TouchableOpacity
-        style={styles.sipCard}
-        onPress={() => setSipPicker(true)}
-        testID="dialer-sip-card"
-      >
-        <View style={[styles.sipIcon, { backgroundColor: selColor + "22" }]}>
-          <MaterialCommunityIcons name="server-network" size={22} color={selColor} />
-          <View style={[styles.sipCheck, { backgroundColor: selColor }]}>
-            <Ionicons name={selectedRuntime?.status === "registered" ? "checkmark" : "swap-horizontal"} size={9} color="#fff" />
-          </View>
+      {/* Active line */}
+      <TouchableOpacity style={styles.lineCard} onPress={() => setSipPicker(true)} testID="dialer-sip-card">
+        <View style={[styles.tile38, { backgroundColor: lineTone.bg }]}>
+          <MaterialCommunityIcons name="server-network" size={19} color={lineTone.fg} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sipLabel}>{runtimes.length === 0 ? "No SIP account · Tap to add" : "Active SIP Account · Tap to switch"}</Text>
-          <Text style={styles.sipName} numberOfLines={1}>{selName}</Text>
-          <Text style={styles.sipHost} numberOfLines={1}>{selHost || "—"}</Text>
-          <Text style={[styles.sipHost, { color: selColor }]} numberOfLines={1}>{selStatusLabel}{selectedAccount && ` · ${selDid}`}</Text>
-          {showRetry && (
-            <TouchableOpacity onPress={retryBootstrap} testID="dialer-sip-retry" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={[styles.sipHost, { color: colors.primary, marginTop: 2, fontWeight: "700" }]}>Tap to retry</Text>
-            </TouchableOpacity>
-          )}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.lineLabel}>
+            {runtimes.length === 0 ? "NO SIP ACCOUNT" : "ACTIVE LINE"}
+          </Text>
+          <Text style={styles.lineName} numberOfLines={1}>
+            {selName}
+            {selectedAccount ? ` · ${selDid}` : ""}
+          </Text>
+          <Text style={styles.lineHost} numberOfLines={1}>{selHost}</Text>
         </View>
-        <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
+        <Ionicons name="swap-horizontal" size={18} color={c.primary} />
       </TouchableOpacity>
 
       {error && (
         <View style={styles.errorBanner} testID="dialer-error-banner">
-          <Ionicons name="alert-circle" size={18} color={colors.red} />
+          <Ionicons name="alert-circle" size={18} color={c.danger} />
           <Text style={styles.errorText} numberOfLines={4}>{error}</Text>
           <TouchableOpacity onPress={() => setError(null)} testID="dialer-error-close">
-            <Ionicons name="close" size={18} color={colors.red} />
+            <Ionicons name="close" size={18} color={c.danger} />
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Tabs (Keypad/Contacts/Recents/More) — navigate to real screens */}
-      <View style={styles.tabRow}>
-        {[
-          { label: "Keypad", icon: "call", route: null, active: true },
-          { label: "Contacts", icon: "person-outline", route: "/(tabs)/contacts" },
-          { label: "Recents", icon: "time-outline", route: "/(tabs)/call-logs" },
-          { label: "More", icon: "ellipsis-horizontal", route: "/(tabs)/more" },
-        ].map((t, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[styles.tab, t.active && styles.tabActive]}
-            onPress={() => t.route && router.push(t.route as any)}
-            testID={`dialer-tab-${t.label.toLowerCase()}`}
-          >
-            <Ionicons name={t.icon as any} size={20} color={t.active ? colors.green : colors.textMuted} />
-            <Text style={[styles.tabLabel, t.active && { color: colors.green }]}>{t.label}</Text>
-            {t.active && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
-        ))}
+      {/* Segmented tabs */}
+      <View style={styles.segment}>
+        {TABS.map((t) => {
+          const active = t.route === null;
+          return (
+            <TouchableOpacity
+              key={t.label}
+              style={[styles.segmentItem, active && styles.segmentItemActive]}
+              onPress={() => t.route && router.push(t.route as any)}
+              testID={`dialer-tab-${t.label.toLowerCase()}`}
+            >
+              <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Number input */}
+      {/* Number */}
       <View style={styles.numberRow} testID="dialer-number-row">
-        <TouchableOpacity
-          style={styles.flag}
-          onPress={() => setCountryPicker(true)}
-          testID="dialer-country-picker"
-        >
-          <Text style={{ fontSize: 16 }}>{country.flag}</Text>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>{country.code}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+        <TouchableOpacity style={styles.ccChip} onPress={() => setCountryPicker(true)} testID="dialer-country-picker">
+          <Text style={styles.ccText}>{country.code}</Text>
+          <Ionicons name="chevron-down" size={12} color={c.muted} />
         </TouchableOpacity>
         <TextInput
           style={styles.numberInput}
           value={num}
           onChangeText={setNum}
-          placeholder="Enter number (e.g. 5551234)"
-          placeholderTextColor={colors.textDim}
+          placeholder="Enter number"
+          placeholderTextColor={c.dim}
           showSoftInputOnFocus={false}
           testID="dialer-input"
         />
         <TouchableOpacity onPress={back} testID="dialer-backspace">
-          <Ionicons name="backspace-outline" size={22} color={colors.textMuted} />
+          <Ionicons name="backspace-outline" size={21} color={c.muted} />
         </TouchableOpacity>
       </View>
+      <View style={styles.hairline} />
 
       {/* Keypad */}
       <View style={styles.keypad}>
-        {KEYS.map(([k, sub], i) => (
-          <TouchableOpacity
-            key={k}
-            style={styles.key}
-            onPress={() => press(k)}
-            testID={`dialer-key-${k}`}
-          >
+        {KEYS.map(([k, sub]) => (
+          <TouchableOpacity key={k} style={styles.key} onPress={() => press(k)} testID={`dialer-key-${k}`}>
             <Text style={styles.keyMain}>{k}</Text>
-            {!!sub && sub !== "voicemail" && <Text style={styles.keySub}>{sub}</Text>}
-            {sub === "voicemail" && <MaterialCommunityIcons name="voicemail" size={12} color={colors.textMuted} />}
+            <Text style={styles.keySub}>{sub}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Action row */}
-      <View style={styles.actionRow}>
+      {/* Call row */}
+      <View style={styles.callRow}>
         <TouchableOpacity style={styles.sideAction} testID="dialer-video">
-          <Ionicons name="videocam" size={22} color={colors.green} />
-          <Text style={styles.sideActionLabel}>Video Call</Text>
+          <View style={styles.sideTile}>
+            <Ionicons name="videocam-outline" size={20} color={c.muted} />
+          </View>
+          <Text style={styles.sideLabel}>Video</Text>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.callBtn} onPress={startCall} testID="dialer-call">
-          <Ionicons name="call" size={30} color="#fff" />
+          <Ionicons name="call" size={28} color={c.onPrimary} />
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.sideAction} testID="dialer-dtmf">
-          <Ionicons name="keypad" size={22} color={colors.textMuted} />
-          <Text style={styles.sideActionLabel}>DTMF</Text>
+          <View style={styles.sideTile}>
+            <Ionicons name="keypad-outline" size={20} color={c.muted} />
+          </View>
+          <Text style={styles.sideLabel}>DTMF</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Quick actions */}
-      <View style={styles.qaCard}>
-        <Text style={styles.qaHeader}>Quick Actions</Text>
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-          <QA icon="swap-horizontal" bg={colors.greenDim} color={colors.green} label="Call Transfer" mci />
-          <QA icon="pause-circle-outline" bg={colors.yellowDim} color={colors.yellow} label="Call Hold" />
-          <QA icon="mic-off" bg={colors.purpleDim} color={colors.purple} label="Mute" />
-          <QA icon="call" bg={colors.redDim} color={colors.red} label="Hangup" rotate />
-        </View>
+      {/* In-call controls (inert until a call connects) */}
+      <Text style={styles.sectionCaps}>IN-CALL CONTROLS</Text>
+      <View style={styles.inCallRow}>
+        {inCallActions.map((a) => (
+          <View key={a.label} style={styles.inCallTile} testID={`dialer-incall-${a.label.toLowerCase()}`}>
+            <View style={[styles.tile34, { backgroundColor: a.bg }]}>
+              <Ionicons name={a.icon} size={16} color={a.fg} />
+            </View>
+            <Text style={styles.inCallLabel}>{a.label}</Text>
+          </View>
+        ))}
       </View>
+      <Text style={styles.inCallNote}>Available once a call connects.</Text>
+
       <SipPickerSheet visible={sipPicker} onClose={() => setSipPicker(false)} />
 
       {/* Country code picker */}
       <Modal visible={countryPicker} transparent animationType="slide" onRequestClose={() => setCountryPicker(false)}>
-        <Pressable style={countryStyles.backdrop} onPress={() => setCountryPicker(false)} />
-        <View style={countryStyles.sheet} testID="country-picker-sheet">
-          <View style={countryStyles.handle} />
-          <View style={countryStyles.header}>
-            <Text style={countryStyles.title}>Select Country Code</Text>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setCountryPicker(false)} />
+        <View style={styles.sheet} testID="country-picker-sheet">
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Select Country Code</Text>
             <TouchableOpacity onPress={() => setCountryPicker(false)} testID="country-picker-close">
-              <Ionicons name="close" size={22} color={colors.textMuted} />
+              <Ionicons name="close" size={22} color={c.muted} />
             </TouchableOpacity>
           </View>
-          <View style={countryStyles.searchBox}>
-            <Ionicons name="search" size={16} color={colors.textMuted} />
+          <View style={styles.sheetSearch}>
+            <Ionicons name="search" size={16} color={c.muted} />
             <TextInput
-              style={countryStyles.searchInput}
+              style={styles.sheetSearchInput}
               placeholder="Search country or code…"
-              placeholderTextColor={colors.textDim}
+              placeholderTextColor={c.dim}
               value={countrySearch}
               onChangeText={setCountrySearch}
               testID="country-picker-search"
             />
           </View>
           <FlatList
-            data={COUNTRIES.filter((c) => !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.includes(countrySearch))}
+            data={COUNTRIES.filter(
+              (x) =>
+                !countrySearch ||
+                x.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                x.code.includes(countrySearch),
+            )}
             keyExtractor={(item, i) => `${item.name}-${i}`}
             style={{ maxHeight: 380 }}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={countryStyles.row}
-                onPress={() => { setCountry(item); setCountryPicker(false); setCountrySearch(""); }}
+                style={styles.sheetRow}
+                onPress={() => {
+                  setCountry(item);
+                  setCountryPicker(false);
+                  setCountrySearch("");
+                }}
                 testID={`country-item-${item.code}`}
               >
                 <Text style={{ fontSize: 22 }}>{item.flag}</Text>
-                <Text style={countryStyles.name}>{item.name}</Text>
-                <Text style={countryStyles.code}>{item.code}</Text>
+                <Text style={styles.sheetRowName}>{item.name}</Text>
+                <Text style={styles.sheetRowCode}>{item.code}</Text>
               </TouchableOpacity>
             )}
           />
@@ -292,188 +282,181 @@ export default function Dialer() {
   );
 }
 
-function QA({ icon, bg, color, label, rotate, mci }: any) {
-  return (
-    <TouchableOpacity style={qaStyles.item}>
-      <View style={[qaStyles.icon, { backgroundColor: bg }]}>
-        {mci ? (
-          <MaterialCommunityIcons name={icon} size={22} color={color} />
-        ) : (
-          <Ionicons
-            name={icon}
-            size={22}
-            color={color}
-            style={rotate ? { transform: [{ rotate: "135deg" }] } : undefined}
-          />
-        )}
-      </View>
-      <Text style={qaStyles.label}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    lineCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      ...cardShadow(c),
+    },
+    tile38: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+    lineLabel: { color: c.dim, fontSize: 11, fontWeight: "600", letterSpacing: 0.6 },
+    lineName: { color: c.text, fontSize: 15, fontWeight: "600", marginTop: 3 },
+    lineHost: { color: c.muted, fontSize: 12, marginTop: 2 },
 
-const qaStyles = StyleSheet.create({
-  item: { flex: 1, alignItems: "center", gap: 6 },
-  icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: { color: "#fff", fontSize: 11, textAlign: "center" },
-});
+    errorBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 10,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: c.dangerSoft,
+      borderWidth: 1,
+      borderColor: c.dangerBorder,
+    },
+    errorText: { flex: 1, color: c.danger, fontSize: 12, fontWeight: "600" },
 
-const styles = StyleSheet.create({
-  errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, backgroundColor: colors.redDim + "80", borderWidth: 1, borderColor: colors.red + "50", borderRadius: 12, marginTop: 10 },
-  errorText: { flex: 1, color: colors.red, fontSize: 12, fontWeight: "600" },
-  sipCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sipIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  sipCheck: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.green,
-    borderWidth: 2,
-    borderColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sipLabel: { color: colors.textMuted, fontSize: 12 },
-  sipName: { color: "#fff", fontSize: 16, fontWeight: "700", marginTop: 2 },
-  sipHost: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  tabRow: {
-    flexDirection: "row",
-    marginTop: spacing.md,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-    position: "relative",
-  },
-  tabActive: { backgroundColor: colors.greenDim, borderColor: colors.green + "40" },
-  tabLabel: { color: colors.textMuted, fontSize: 12 },
-  tabUnderline: {
-    position: "absolute",
-    bottom: 6,
-    width: 30,
-    height: 2,
-    backgroundColor: colors.green,
-    borderRadius: 1,
-  },
-  numberRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: 10,
-  },
-  flag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: colors.card,
-    borderRadius: 10,
-  },
-  numberInput: { flex: 1, color: "#fff", fontSize: 16 },
-  keypad: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginTop: spacing.md,
-  },
-  key: {
-    width: "30%",
-    aspectRatio: 1.6,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-    gap: 2,
-  },
-  keyMain: { color: "#fff", fontSize: 28, fontWeight: "400" },
-  keySub: { color: colors.textMuted, fontSize: 10, letterSpacing: 2, fontWeight: "600" },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 8,
-  },
-  sideAction: { alignItems: "center", gap: 4, width: 70 },
-  sideActionLabel: { color: colors.textMuted, fontSize: 12 },
-  callBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: colors.green,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  metricsRow: {
-    flexDirection: "row",
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 14,
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  metric: { flex: 1, alignItems: "center" },
-  metricLabel: { color: colors.textMuted, fontSize: 12 },
-  metricValue: { color: "#fff", fontSize: 17, fontWeight: "700", marginTop: 4 },
-  metricSuffix: { color: colors.textMuted, fontSize: 11 },
-  metricDivider: { width: 1, backgroundColor: colors.border },
-  qaCard: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 14,
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  qaHeader: { color: "#fff", fontSize: 15, fontWeight: "600" },
-});
+    segment: {
+      flexDirection: "row",
+      gap: 4,
+      marginTop: 14,
+      padding: 4,
+      borderRadius: 12,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    segmentItem: { flex: 1, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+    segmentItemActive: { backgroundColor: c.primary },
+    segmentLabel: { color: c.muted, fontSize: 12.5, fontWeight: "600" },
+    segmentLabelActive: { color: c.onPrimary },
 
-const countryStyles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
-  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "85%", backgroundColor: "#0C1526", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20, borderWidth: 1, borderColor: colors.border },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 12 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.bgAlt, borderRadius: 10, paddingHorizontal: 12, height: 42, marginTop: 12, borderWidth: 1, borderColor: colors.border },
-  searchInput: { flex: 1, color: "#fff", fontSize: 14 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
-  name: { color: "#fff", fontSize: 14, flex: 1 },
-  code: { color: colors.primary, fontWeight: "700", fontSize: 14 },
-});
+    numberRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 20 },
+    ccChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: 9,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    ccText: { color: c.text, fontSize: 13.5, fontWeight: "600" },
+    numberInput: { flex: 1, color: c.text, fontSize: 24, fontWeight: "500", letterSpacing: 1, padding: 0 },
+    hairline: { height: 1, backgroundColor: c.border, marginTop: 10 },
+
+    keypad: { flexDirection: "row", flexWrap: "wrap", marginTop: 10 },
+    key: {
+      width: "33.33%",
+      aspectRatio: 1.7,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 1,
+    },
+    keyMain: { color: c.text, fontSize: 27, fontWeight: "400", lineHeight: 30 },
+    keySub: { color: c.dim, fontSize: 9.5, letterSpacing: 1.8, fontWeight: "600", height: 12 },
+
+    callRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 24,
+      marginTop: 6,
+    },
+    sideAction: { width: 64, alignItems: "center", gap: 5 },
+    sideTile: {
+      width: CONTROL_H - 2,
+      height: CONTROL_H - 2,
+      borderRadius: 12,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    sideLabel: { color: c.muted, fontSize: 11 },
+    callBtn: {
+      width: 66,
+      height: 66,
+      borderRadius: 33,
+      backgroundColor: c.success,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    sectionCaps: {
+      color: c.dim,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.3,
+      marginTop: 20,
+      marginBottom: 10,
+    },
+    inCallRow: { flexDirection: "row", gap: 8 },
+    inCallTile: {
+      flex: 1,
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 6,
+      borderRadius: 12,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      opacity: 0.55,
+    },
+    tile34: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+    inCallLabel: { color: c.muted, fontSize: 11, textAlign: "center" },
+    inCallNote: { color: c.dim, fontSize: 11.5, marginTop: 8 },
+
+    sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: c.overlay },
+    sheet: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      maxHeight: "85%",
+      backgroundColor: c.bgElev,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 20,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    sheetHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: c.borderStrong,
+      alignSelf: "center",
+      marginBottom: 12,
+    },
+    sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    sheetTitle: { color: c.text, fontSize: 18, fontWeight: "700" },
+    sheetSearch: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      height: CONTROL_H,
+      marginTop: 12,
+      paddingHorizontal: 13,
+      borderRadius: 10,
+      backgroundColor: c.input,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    sheetSearchInput: { flex: 1, color: c.text, fontSize: 14 },
+    sheetRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.borderSoft,
+    },
+    sheetRowName: { flex: 1, color: c.text, fontSize: 14 },
+    sheetRowCode: { color: c.primary, fontSize: 14, fontWeight: "700" },
+  });

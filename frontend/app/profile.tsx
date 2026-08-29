@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "rea
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Screen from "@/src/components/Screen";
-import { colors } from "@/src/theme";
+import { useTheme, useThemedStyles, type Palette } from "@/src/theme";
 import { apiGet } from "@/src/api";
 import { useAuth } from "@/src/AuthContext";
 
 export default function Profile() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [data, setData] = useState<any>(null);
   const { logout } = useAuth();
   const router = useRouter();
@@ -25,7 +27,7 @@ export default function Profile() {
         <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Edit Profile</Text>
       </TouchableOpacity>}
     >
-      {!data ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
+      {!data ? <ActivityIndicator color={c.primary} style={{ marginTop: 40 }} /> : (
         <>
           <View style={styles.headerCard}>
             <View style={{ flexDirection: "row", gap: 14 }}>
@@ -40,17 +42,17 @@ export default function Profile() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{data.account.full_name}</Text>
                 <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
-                  <View style={[styles.pill, { backgroundColor: colors.primaryDim }]}>
-                    <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>{data.account.role}</Text>
+                  <View style={[styles.pill, { backgroundColor: c.primaryDim }]}>
+                    <Text style={{ color: c.primary, fontSize: 11, fontWeight: "700" }}>{data.account.role}</Text>
                   </View>
-                  <View style={[styles.pill, { backgroundColor: colors.greenDim }]}>
-                    <Text style={{ color: colors.green, fontSize: 11, fontWeight: "700" }}>{data.account.status}</Text>
+                  <View style={[styles.pill, { backgroundColor: c.greenDim }]}>
+                    <Text style={{ color: c.green, fontSize: 11, fontWeight: "700" }}>{data.account.status}</Text>
                   </View>
                 </View>
                 <Text style={styles.metaLine}>{data.account.email}</Text>
                 <Text style={styles.metaLine}>{data.account.phone}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
             </View>
             <View style={styles.statsRow}>
               {data.stats.map((s: any, i: number) => (
@@ -69,24 +71,24 @@ export default function Profile() {
             </View>
           </View>
 
-          <Section title="Account Information" icon="person" color={colors.primary}>
+          <Section title="Account Information" icon="person" color={c.primary}>
             <Row icon="person-outline" label="Full Name" value={data.account.full_name} />
             <Row icon="finger-print-outline" label="Username" value={data.account.username} />
             <Row icon="mail-outline" label="Email Address" value={data.account.email} />
             <Row icon="call-outline" label="Phone Number" value={data.account.phone} />
             <Row icon="shield-outline" label="Role" value={data.account.role} />
             <Row icon="business-outline" label="Account Type" value={data.account.account_type} />
-            <Row icon="checkmark-circle-outline" label="Status" value={data.account.status} valueColor={colors.green} />
+            <Row icon="checkmark-circle-outline" label="Status" value={data.account.status} valueColor={c.green} />
             <Row icon="calendar-outline" label="Member Since" value={data.account.member_since} />
             <Row icon="time-outline" label="Last Login" value={data.account.last_login} last />
           </Section>
 
-          <Section title="Security" icon="shield" color={colors.primary}>
+          <Section title="Security" icon="shield" color={c.primary}>
             <Row icon="lock-closed-outline" label="Change Password" value="" sub="Update your account password" />
-            <Row icon="shield-checkmark-outline" label="Two-Factor Authentication" value="Enabled" valueColor={colors.green} sub="Add an extra layer of security" last />
+            <Row icon="shield-checkmark-outline" label="Two-Factor Authentication" value="Enabled" valueColor={c.green} sub="Add an extra layer of security" last />
           </Section>
 
-          <Section title="Preferences" icon="settings" color={colors.primary}>
+          <Section title="Preferences" icon="settings" color={c.primary}>
             <Row icon="globe-outline" label="Language" value="English" />
             <Row icon="time-outline" label="Time Zone" value="(UTC-05:00) America/New_York" />
             <Row icon="calendar-outline" label="Date Format" value="MM/DD/YYYY" />
@@ -94,8 +96,8 @@ export default function Profile() {
           </Section>
 
           <TouchableOpacity style={styles.logoutBtn} onPress={doLogout} testID="profile-logout">
-            <Ionicons name="log-out-outline" size={18} color={colors.red} />
-            <Text style={{ color: colors.red, fontWeight: "700", fontSize: 15 }}>Log Out</Text>
+            <Ionicons name="log-out-outline" size={18} color={c.red} />
+            <Text style={{ color: c.red, fontWeight: "700", fontSize: 15 }}>Log Out</Text>
           </TouchableOpacity>
         </>
       )}
@@ -104,6 +106,7 @@ export default function Profile() {
 }
 
 function Section({ title, icon, color, children }: any) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.section}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -116,36 +119,39 @@ function Section({ title, icon, color, children }: any) {
 }
 
 function Row({ icon, label, value, sub, valueColor, last }: any) {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
-    <View style={[styles.row, !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft }]}>
-      <Ionicons name={icon} size={16} color={colors.textMuted} />
+    <View style={[styles.row, !last && { borderBottomWidth: 1, borderBottomColor: c.borderSoft }]}>
+      <Ionicons name={icon} size={16} color={c.textMuted} />
       <View style={{ flex: 1 }}>
         <Text style={styles.rowLabel}>{label}</Text>
-        {sub && <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>{sub}</Text>}
+        {sub && <Text style={{ color: c.textMuted, fontSize: 11, marginTop: 2 }}>{sub}</Text>}
       </View>
       <Text style={[styles.rowValue, valueColor && { color: valueColor }]}>{value}</Text>
-      <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+      <Ionicons name="chevron-forward" size={14} color={c.textMuted} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  editBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.card, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
-  headerCard: { padding: 14, backgroundColor: colors.card, borderRadius: 16, marginTop: 8, borderWidth: 1, borderColor: colors.border },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.primaryDim, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontSize: 28, fontWeight: "700" },
-  camBtn: { position: "absolute", bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bgAlt, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.card },
-  name: { color: "#fff", fontWeight: "700", fontSize: 20 },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  metaLine: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
-  statsRow: { flexDirection: "row", marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
-  statItem: { flex: 1, alignItems: "center", gap: 4 },
-  statIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  statValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginTop: 4 },
-  statLabel: { color: colors.textMuted, fontSize: 11 },
-  section: { padding: 14, backgroundColor: colors.card, borderRadius: 14, marginTop: 14, borderWidth: 1, borderColor: colors.border },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
-  rowLabel: { color: "#fff", fontSize: 14 },
-  rowValue: { color: colors.textMuted, fontSize: 13 },
-  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14, padding: 14, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.red + "40" },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    editBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: c.card, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: c.border },
+    headerCard: { padding: 14, backgroundColor: c.card, borderRadius: 16, marginTop: 8, borderWidth: 1, borderColor: c.border },
+    avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: c.primaryDim, alignItems: "center", justifyContent: "center" },
+    avatarText: { color: c.text, fontSize: 28, fontWeight: "700" },
+    camBtn: { position: "absolute", bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: c.bgAlt, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.card },
+    name: { color: c.text, fontWeight: "700", fontSize: 20 },
+    pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+    metaLine: { color: c.textMuted, fontSize: 12, marginTop: 4 },
+    statsRow: { flexDirection: "row", marginTop: 16, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 14 },
+    statItem: { flex: 1, alignItems: "center", gap: 4 },
+    statIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+    statValue: { color: c.text, fontSize: 18, fontWeight: "700", marginTop: 4 },
+    statLabel: { color: c.textMuted, fontSize: 11 },
+    section: { padding: 14, backgroundColor: c.card, borderRadius: 14, marginTop: 14, borderWidth: 1, borderColor: c.border },
+    row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
+    rowLabel: { color: c.text, fontSize: 14 },
+    rowValue: { color: c.textMuted, fontSize: 13 },
+    logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14, padding: 14, backgroundColor: c.card, borderRadius: 12, borderWidth: 1, borderColor: c.red + "40" },
+  });

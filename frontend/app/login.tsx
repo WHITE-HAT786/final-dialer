@@ -1,39 +1,106 @@
 import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { colors } from "@/src/theme";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+
+import { useTheme, useThemedStyles, type Palette } from "@/src/theme";
 import { useAuth } from "@/src/AuthContext";
-import { BrandMark } from "@/src/components/BrandMark";
+import DepthGlobe from "@/src/components/DepthGlobe";
+import {
+  AUTH_SHOW_GOOGLE,
+  AuthCard,
+  AuthScreen,
+  BrandMark,
+  Divider,
+  ErrorText,
+  Field,
+  FooterPrompt,
+  GoogleButton,
+  Note,
+  PrimaryButton,
+  RevealToggle,
+  Spacer,
+  useAuthText,
+} from "@/src/components/AuthUI";
+
+const APP_VERSION = "v2.5.0";
+
+/** The globe's fade-into-background wash, per the design's 180deg gradient. */
+function scrimFor(c: Palette): {
+  colors: [string, string, string];
+  stops: [number, number, number];
+} {
+  return c.mode === "light"
+    ? {
+        colors: ["rgba(245,247,251,0.10)", "rgba(245,247,251,0.80)", c.bg],
+        stops: [0, 0.42, 0.66],
+      }
+    : {
+        colors: ["rgba(5,11,26,0.15)", "rgba(5,11,26,0.72)", c.bg],
+        stops: [0, 0.42, 0.68],
+      };
+}
 
 export default function Login() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const T = useAuthText();
   const router = useRouter();
-  const { loginEmail, verify2fa, user } = useAuth();
+  const { loginEmail, loginGoogleSession, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // 2FA: set once the password step reports a challenge.
-  const [twoFA, setTwoFA] = useState<{ challenge: string; method: string } | null>(null);
-  const [code, setCode] = useState("");
 
   useEffect(() => {
     if (user) router.replace("/(tabs)/dashboard");
   }, [user]);
 
-  const onEmailLogin = async () => {
+  // Cold-start deep link carrying a Google session_id. Only meaningful while
+  // AUTH_SHOW_GOOGLE is on — loginGoogleSession throws otherwise.
+  useEffect(() => {
+    if (!AUTH_SHOW_GOOGLE) return;
+    (async () => {
+      if (Platform.OS === "web") {
+        const hash = (typeof window !== "undefined" && window.location.hash) || "";
+        const query = (typeof window !== "undefined" && window.location.search) || "";
+        const sid = parseSessionId(hash) || parseSessionId(query);
+        if (sid) {
+          try {
+            await loginGoogleSession(sid);
+            if (typeof window !== "undefined") {
+              window.history.replaceState(null, "", window.location.pathname);
+            }
+          } catch (e: any) {
+            setErr(e.message || "Google login failed");
+          }
+        }
+        return;
+      }
+      const initial = await Linking.getInitialURL();
+      const sid = initial ? parseSessionId(initial) : null;
+      if (sid) {
+        try {
+          await loginGoogleSession(sid);
+        } catch (e: any) {
+          setErr(e.message || "Google login failed");
+        }
+      }
+    })();
+  }, []);
+
+  function parseSessionId(url: string): string | null {
+    try {
+      const hashMatch = url.match(/session_id=([^&]+)/);
+      if (hashMatch) return decodeURIComponent(hashMatch[1]);
+    } catch {}
+    return null;
+  }
+
+  const onSignIn = async () => {
     setErr(null);
     if (!email.trim() || !password.trim()) {
       setErr("Please enter email and password");
@@ -43,7 +110,8 @@ export default function Login() {
     try {
       const res = await loginEmail(email.trim(), password);
       if (res.status === "2fa") {
-        setTwoFA({ challenge: res.challenge, method: res.method });
+        setPassword("");
+        router.push("/verify-2fa");
       } else {
         router.replace("/(tabs)/dashboard");
       }
@@ -54,204 +122,170 @@ export default function Login() {
     }
   };
 
-  const onVerify2fa = async () => {
+  const onGoogle = async () => {
     setErr(null);
-    if (!twoFA || !code.trim()) {
-      setErr("Enter the verification code");
-      return;
-    }
     setBusy(true);
     try {
-      await verify2fa(twoFA.challenge, code.trim());
+      const redirect =
+        Platform.OS === "web"
+          ? typeof window !== "undefined"
+            ? window.location.origin + "/"
+            : "/"
+          : Linking.createURL("");
+      const authUrl =
+        "https://auth.emergentagent.com/?redirect=" + encodeURIComponent(redirect);
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined") window.location.href = authUrl;
+        return;
+      }
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirect);
+      if (result.type !== "success" || !result.url) {
+        setBusy(false);
+        return;
+      }
+      const sid = parseSessionId(result.url);
+      if (!sid) {
+        setErr("Could not obtain session");
+        setBusy(false);
+        return;
+      }
+      await loginGoogleSession(sid);
       router.replace("/(tabs)/dashboard");
     } catch (e: any) {
-      setErr(e.message || "Verification failed");
+      setErr(e.message || "Google login failed");
     } finally {
       setBusy(false);
     }
   };
 
+  const scrim = scrimFor(c);
+
   return (
-    <SafeAreaView style={styles.wrap} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <AuthScreen
+      behind={
+        <View style={styles.globe} pointerEvents="none">
+          <DepthGlobe size={540} theme={c.mode} accent={c.primary} />
+        </View>
+      }
+      scrim={
+        <LinearGradient
+          colors={scrim.colors}
+          locations={scrim.stops}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      }
+    >
+      <View style={styles.brandCol}>
+        <BrandMark size={64} />
+        <Text style={T.h1}>Depth Route Dialer</Text>
+        <Text style={styles.tagline}>VoIP • SIP • SMS • Reports</Text>
+      </View>
+
+      <AuthCard>
+        <Text style={T.cardTitle}>Welcome back</Text>
+        <Text style={styles.subtitle}>Sign in to continue to your dashboard</Text>
+
+        <View style={styles.fields}>
+          <Field
+            icon="mail-outline"
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            keyboardType="email-address"
+            returnKeyType="next"
+            testID="login-email-input"
+          />
+          <Field
+            icon="lock-closed-outline"
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPw}
+            autoCapitalize="none"
+            autoComplete="password"
+            returnKeyType="go"
+            onSubmitEditing={onSignIn}
+            testID="login-password-input"
+            trailing={
+              <RevealToggle
+                shown={showPw}
+                onPress={() => setShowPw((s) => !s)}
+                testID="login-toggle-password"
+              />
+            }
+          />
+        </View>
+
+        <TouchableOpacity
+          style={styles.forgotRow}
+          onPress={() => router.push("/forgot-password")}
+          testID="login-forgot-password-link"
+          accessibilityRole="link"
         >
-          {/* Logo */}
-          <View style={styles.brandCol}>
-            <BrandMark size={72} theme="dark" style={{ marginBottom: 16 }} />
-            <Text style={styles.brand}>Depth Route Dialer</Text>
-            <Text style={styles.sub}>VoIP • SIP • SMS • Reports</Text>
+          <Text style={styles.forgotText}>Forgot password?</Text>
+        </TouchableOpacity>
+
+        {err ? (
+          <View style={styles.errorSlot}>
+            <ErrorText testID="login-error">{err}</ErrorText>
           </View>
+        ) : null}
 
-          {/* Card */}
-          <View style={styles.card} testID="login-card">
-            <Text style={styles.h1}>Welcome back</Text>
-            <Text style={styles.help}>Sign in to continue to your dashboard</Text>
+        <PrimaryButton
+          label="Sign In"
+          onPress={onSignIn}
+          busy={busy}
+          testID="login-submit-button"
+          style={styles.signInButton}
+        />
 
-            <View style={styles.field}>
-              <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={colors.textDim}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                testID="login-email"
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={colors.textDim}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPw}
-                testID="login-password"
-              />
-              <TouchableOpacity onPress={() => setShowPw((s) => !s)} testID="login-toggle-pw">
-                <Ionicons
-                  name={showPw ? "eye-off-outline" : "eye-outline"}
-                  size={18}
-                  color={colors.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {twoFA && (
-              <View style={styles.field}>
-                <Ionicons name="shield-checkmark-outline" size={18} color={colors.textMuted} />
-                <TextInput
-                  style={styles.input}
-                  placeholder={twoFA.method === "email" ? "Email code" : "Authenticator code"}
-                  placeholderTextColor={colors.textDim}
-                  value={code}
-                  onChangeText={setCode}
-                  keyboardType="number-pad"
-                  autoFocus
-                  testID="login-2fa-code"
-                />
-              </View>
-            )}
-
-            {err && (
-              <Text style={styles.error} testID="login-error">
-                {err}
-              </Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.primary, busy && { opacity: 0.7 }]}
-              onPress={twoFA ? onVerify2fa : onEmailLogin}
+        {AUTH_SHOW_GOOGLE ? (
+          <>
+            <Divider />
+            <GoogleButton
+              label="Continue with Google"
+              onPress={onGoogle}
               disabled={busy}
-              testID="login-submit-button"
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryText}>{twoFA ? "Verify" : "Sign In"}</Text>
-              )}
-            </TouchableOpacity>
+              testID="login-google-button"
+            />
+          </>
+        ) : null}
 
-            {!twoFA && (
-              <View style={styles.demoBox}>
-                <Ionicons name="information-circle" size={16} color={colors.primary} />
-                <Text style={styles.demoText}>
-                  Sign in with your Depth Route Dialer account
-                </Text>
-              </View>
-            )}
-          </View>
+        <View style={styles.noteSlot}>
+          <Note>Sign in with your Depth Route Dialer account</Note>
+        </View>
+      </AuthCard>
 
-          <Text style={styles.footer}>v2.5.0 • © Depth Route</Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <Spacer />
+
+      <FooterPrompt
+        prompt="New here?"
+        action="Create an account"
+        onPress={() => router.push("/signup")}
+        testID="login-register-link"
+      />
+      <Text style={[T.caption, T.center, styles.version]}>
+        {APP_VERSION} • © Depth Route
+      </Text>
+    </AuthScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg },
-  container: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 40 },
-  brandCol: { alignItems: "center", marginBottom: 32 },
-  logo: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  brand: { color: "#fff", fontSize: 26, fontWeight: "700" },
-  tagline: { color: colors.textMuted, fontSize: 14, marginTop: 4 },
-  sub: { color: colors.textDim, fontSize: 12, marginTop: 6 },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  h1: { color: "#fff", fontSize: 22, fontWeight: "700" },
-  help: { color: colors.textMuted, fontSize: 13, marginTop: 4, marginBottom: 20 },
-  field: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.bgAlt,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 52,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  input: { flex: 1, color: "#fff", fontSize: 15 },
-  primary: {
-    backgroundColor: colors.primary,
-    height: 52,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-  },
-  primaryText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 20 },
-  hair: { flex: 1, height: 1, backgroundColor: colors.border },
-  orText: { color: colors.textMuted, fontSize: 12 },
-  google: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-  },
-  googleText: { color: "#0F1A30", fontSize: 15, fontWeight: "600" },
-  error: { color: colors.red, fontSize: 13, marginBottom: 4 },
-  demoBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 20,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: colors.primaryDim + "50",
-    borderWidth: 1,
-    borderColor: colors.primary + "40",
-  },
-  demoText: { color: colors.primary, fontSize: 12, fontWeight: "600" },
-  footer: { textAlign: "center", color: colors.textDim, fontSize: 12, marginTop: 24 },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    globe: { position: "absolute", top: -40, left: -70, width: 540, height: 540 },
+    brandCol: { alignItems: "center", gap: 14, marginTop: 48, marginBottom: 34 },
+    tagline: { color: c.dim, fontSize: 12, letterSpacing: 0.4 },
+    subtitle: { color: c.muted, fontSize: 13, marginTop: 6, marginBottom: 20 },
+    fields: { gap: 12 },
+    forgotRow: { alignSelf: "flex-end", marginTop: 12 },
+    forgotText: { color: c.primary, fontSize: 13, fontWeight: "600" },
+    errorSlot: { marginTop: 12 },
+    signInButton: { marginTop: 16 },
+    noteSlot: { marginTop: 20 },
+    version: { marginTop: 18 },
+  });

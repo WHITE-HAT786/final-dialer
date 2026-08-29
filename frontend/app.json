@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Depth Route Dialer",
+    "name": "frontend",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,16 +10,25 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.depthroute.dialer"
+      "bundleIdentifier": "com.emergent.mobiledesigndev.ofypvu"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
-        "backgroundColor": "#050B1A"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.depthroute.dialer"
+      "package": "com.emergent.mobiledesigndev.ofypvu",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -31,10 +40,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/depthroute-mark-dark.png",
-          "imageWidth": 180,
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#050B1A"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-audio",
@@ -43,6 +52,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "beefb450-bd9a-447f-8931-1cb4fadd88c5"
+      }
+    },
+    "owner": "depthroute"
   }
 }

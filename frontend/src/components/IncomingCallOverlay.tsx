@@ -3,17 +3,19 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from "react
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSipEngine } from "@/src/sip/SipEngineContext";
-import { colors } from "@/src/theme";
+import { useTheme, useThemedStyles, type Palette } from "@/src/theme";
 
 /**
  * Full-screen modal that appears when a NEW incoming SIP call arrives (state=ringing, direction=incoming).
  * Answer -> navigates to /call, Decline -> hangs up.
  */
 export default function IncomingCallOverlay() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const engine = useSipEngine();
   const router = useRouter();
   const incoming = engine.calls.find(
-    (c) => c.direction === "incoming" && (c.state === "ringing" || c.state === "connecting"),
+    (call) => call.direction === "incoming" && (call.state === "ringing" || call.state === "connecting"),
   );
 
   const pulse = React.useRef(new Animated.Value(1)).current;
@@ -52,10 +54,10 @@ export default function IncomingCallOverlay() {
         <Text style={styles.number}>{remote}</Text>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: colors.red }]} onPress={decline} testID="incoming-decline">
+          <TouchableOpacity style={[styles.btn, { backgroundColor: c.red }]} onPress={decline} testID="incoming-decline">
             <Ionicons name="call" size={28} color="#fff" style={{ transform: [{ rotate: "135deg" }] }} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: colors.green }]} onPress={answer} testID="incoming-answer">
+          <TouchableOpacity style={[styles.btn, { backgroundColor: c.green }]} onPress={answer} testID="incoming-answer">
             <Ionicons name="call" size={28} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -64,13 +66,14 @@ export default function IncomingCallOverlay() {
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
-  tag: { color: colors.textMuted, textTransform: "uppercase", letterSpacing: 2, fontSize: 12, marginBottom: 30 },
-  avatar: { width: 140, height: 140, borderRadius: 70, backgroundColor: colors.primaryDim, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontSize: 46, fontWeight: "700" },
-  name: { color: "#fff", fontSize: 28, fontWeight: "700", marginTop: 24 },
-  number: { color: colors.textMuted, fontSize: 15, marginTop: 4 },
-  actions: { flexDirection: "row", gap: 60, marginTop: 80 },
-  btn: { width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center" },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    wrap: { flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
+    tag: { color: c.textMuted, textTransform: "uppercase", letterSpacing: 2, fontSize: 12, marginBottom: 30 },
+    avatar: { width: 140, height: 140, borderRadius: 70, backgroundColor: c.primaryDim, alignItems: "center", justifyContent: "center" },
+    avatarText: { color: c.text, fontSize: 46, fontWeight: "700" },
+    name: { color: c.text, fontSize: 28, fontWeight: "700", marginTop: 24 },
+    number: { color: c.textMuted, fontSize: 15, marginTop: 4 },
+    actions: { flexDirection: "row", gap: 60, marginTop: 80 },
+    btn: { width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center" },
+  });

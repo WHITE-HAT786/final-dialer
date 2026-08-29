@@ -8,11 +8,29 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/AuthContext";
 import { SipEngineProvider } from "@/src/sip/SipEngineContext";
-import SipAuthBridge from "@/src/sip/SipAuthBridge";
 import IncomingCallOverlay from "@/src/components/IncomingCallOverlay";
+import { ThemeProvider, useTheme } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+
+/** Inside ThemeProvider, so chrome colours follow the active palette. */
+function Shell() {
+  const c = useTheme();
+
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <StatusBar
+        barStyle={c.mode === "dark" ? "light-content" : "dark-content"}
+        backgroundColor={c.bg}
+      />
+      <Stack
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}
+      />
+      <IncomingCallOverlay />
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
@@ -26,16 +44,15 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#050B1A" }}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <SipEngineProvider>
-            <StatusBar barStyle="light-content" backgroundColor="#050B1A" />
-            <SipAuthBridge />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#050B1A" } }} />
-            <IncomingCallOverlay />
-          </SipEngineProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <SipEngineProvider>
+              <Shell />
+            </SipEngineProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

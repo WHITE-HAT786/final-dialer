@@ -8,7 +8,7 @@ class SipAccount(private val module: ExpoPjsipModule) : Account() {
   var currentRegState: String = "offline"
 
   override fun onRegState(prm: OnRegStateParam) {
-    val code = prm.code.swigValue()
+    val code = prm.code   // pjsua2 SWIG bindings expose enums as plain Int
     val active = try { info.regIsActive } catch (_: Throwable) { false }
     currentRegState = when {
       code in 200..299 && active -> "registered"
@@ -47,7 +47,7 @@ class SipCall : Call {
       pjsip_inv_state.PJSIP_INV_STATE_DISCONNECTED -> "ended"
       else -> "idle"
     }
-    module.emitCallState(callId, state, ci.lastStatusCode.swigValue(), ci.lastReason)
+    module.emitCallState(callId, state, ci.lastStatusCode, ci.lastReason)
   }
 
   /** Bridge the call's audio to the device capture/playback = two-way RTP audio. */

@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
-import { colors } from "@/src/theme";
+import { useTheme, useThemedStyles, type Palette } from "@/src/theme";
 import { loadMohPrefs, MohPrefs } from "@/src/moh/MohPrefs";
 
 function fmt(sec: number) {
@@ -15,6 +15,8 @@ function fmt(sec: number) {
 }
 
 export default function CallScreen() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ number?: string; name?: string; callId?: string; accountId?: string }>();
   const router = useRouter();
   const multi = useMultiSip();
@@ -186,7 +188,7 @@ export default function CallScreen() {
 
   const viaName = account?.displayName || account?.username || "No SIP account";
   const viaId = account?.callerId || (account ? `${account.username}@${account.domain}` : "");
-  const viaColor = owner?.status === "registered" ? colors.green : (account?.color as string) || colors.textMuted;
+  const viaColor = owner?.status === "registered" ? c.green : (account?.color as string) || c.textMuted;
 
   return (
     <SafeAreaView style={styles.wrap} edges={["top", "bottom"]}>
@@ -196,7 +198,7 @@ export default function CallScreen() {
           <Text style={styles.sipChipText} numberOfLines={1}>{viaName}</Text>
         </View>
         <TouchableOpacity onPress={() => router.back()} testID="call-minimize">
-          <Ionicons name="chevron-down" size={26} color="#fff" />
+          <Ionicons name="chevron-down" size={26} color={c.text} />
         </TouchableOpacity>
       </View>
 
@@ -216,7 +218,7 @@ export default function CallScreen() {
         <Text style={styles.number} testID="call-number">{number}</Text>
         <View style={styles.stateRow}>
           <View style={[styles.stateDot, {
-            backgroundColor: state === "connected" ? colors.green : state === "failed" ? colors.red : colors.yellow,
+            backgroundColor: state === "connected" ? c.green : state === "failed" ? c.red : c.yellow,
           }]} />
           <Text style={styles.state} testID="call-state">{stateLabel}</Text>
         </View>
@@ -234,14 +236,14 @@ export default function CallScreen() {
 
         {error && (
           <View style={styles.errorBanner} testID="call-error-banner">
-            <Ionicons name="alert-circle" size={18} color={colors.red} />
+            <Ionicons name="alert-circle" size={18} color={c.red} />
             <Text style={styles.errorText} numberOfLines={5}>{error}</Text>
           </View>
         )}
 
         {mohNote && (
           <View style={styles.mohNote} testID="call-moh-note">
-            <MaterialCommunityIcons name="music-note" size={16} color={colors.primary} />
+            <MaterialCommunityIcons name="music-note" size={16} color={c.primary} />
             <Text style={styles.mohNoteText} numberOfLines={2}>{mohNote}</Text>
           </View>
         )}
@@ -285,7 +287,7 @@ export default function CallScreen() {
             value={transferTarget}
             onChangeText={setTransferTarget}
             placeholder="Extension or number"
-            placeholderTextColor={colors.textDim}
+            placeholderTextColor={c.textDim}
             autoCapitalize="none"
             keyboardType="phone-pad"
             testID="transfer-input"
@@ -322,69 +324,72 @@ export default function CallScreen() {
 }
 
 function ActionBtn({ active, icon, label, onPress, testID }: any) {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity style={styles.actionItem} onPress={onPress} testID={testID}>
       <View style={[styles.actionBtn, active && styles.actionBtnActive]}>
-        <Ionicons name={icon} size={22} color={active ? colors.bg : "#fff"} />
+        <Ionicons name={icon} size={22} color={active ? c.bg : c.text} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 20 },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
-  sipChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, flex: 1, marginRight: 12 },
-  sipDot: { width: 8, height: 8, borderRadius: 4 },
-  sipChipText: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  centerCol: { flex: 1, alignItems: "center", justifyContent: "center" },
-  pulseRing: { position: "absolute", width: 140, height: 140, borderRadius: 70, borderWidth: 2, borderColor: colors.primary },
-  avatar: { width: 130, height: 130, borderRadius: 65, backgroundColor: colors.primaryDim, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontSize: 42, fontWeight: "700" },
-  name: { color: "#fff", fontSize: 24, fontWeight: "700", marginTop: 24 },
-  number: { color: colors.textMuted, fontSize: 15, marginTop: 4 },
-  stateRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
-  stateDot: { width: 8, height: 8, borderRadius: 4 },
-  state: { color: colors.textMuted, fontSize: 14 },
-  viaCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 12, marginTop: 20, borderWidth: 1, borderColor: colors.border, width: "100%" },
-  viaLabel: { color: colors.textMuted, fontSize: 11 },
-  viaName: { color: "#fff", fontSize: 14, fontWeight: "700", marginTop: 2 },
-  viaDid: { color: colors.primary, fontSize: 12, fontWeight: "600", maxWidth: 130 },
-  errorBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.redDim + "90", borderWidth: 1, borderColor: colors.red + "60", borderRadius: 12, padding: 12, marginTop: 12, width: "100%" },
-  errorText: { flex: 1, color: colors.red, fontSize: 12, fontWeight: "600" },
-  mohNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: colors.primaryDim + "80",
-    borderWidth: 1,
-    borderColor: colors.primary + "50",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginTop: 10,
-    width: "100%",
-  },
-  mohNoteText: { flex: 1, color: colors.primary, fontSize: 12, fontWeight: "600" },
-  dtmfBox: { marginTop: 20, width: "100%", padding: 12, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  dtmfDigits: { color: "#fff", fontSize: 22, textAlign: "center", letterSpacing: 4, minHeight: 30 },
-  dtmfGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 8 },
-  dtmfKey: { width: "30%", aspectRatio: 2.2, alignItems: "center", justifyContent: "center", backgroundColor: colors.bgAlt, borderRadius: 10, marginBottom: 8 },
-  dtmfText: { color: "#fff", fontSize: 22, fontWeight: "600" },
-  actionsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", paddingHorizontal: 8 },
-  actionItem: { width: "31%", alignItems: "center", marginBottom: 18, gap: 6 },
-  actionBtn: { width: 62, height: 62, borderRadius: 31, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
-  actionBtnActive: { backgroundColor: "#fff", borderColor: "#fff" },
-  actionLabel: { color: "#fff", fontSize: 12 },
-  hangup: { alignSelf: "center", width: 72, height: 72, borderRadius: 36, backgroundColor: colors.red, alignItems: "center", justifyContent: "center", marginBottom: 20 },
-  tBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
-  tSheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: "#0C1526", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30, borderWidth: 1, borderColor: colors.border },
-  tHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 12 },
-  tTitle: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 4 },
-  tHelp: { color: colors.textMuted, fontSize: 12, marginBottom: 14 },
-  tInput: { backgroundColor: colors.bgAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, color: "#fff", fontSize: 15, borderWidth: 1, borderColor: colors.border },
-  tInfo: { color: colors.yellow, fontSize: 12, marginTop: 10 },
-  tCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.card, alignItems: "center", borderWidth: 1, borderColor: colors.border },
-  tGo: { flex: 1.2, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.primary, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6 },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    wrap: { flex: 1, backgroundColor: c.bg, paddingHorizontal: 20 },
+    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
+    sipChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: c.card, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, flex: 1, marginRight: 12 },
+    sipDot: { width: 8, height: 8, borderRadius: 4 },
+    sipChipText: { color: c.text, fontSize: 13, fontWeight: "600" },
+    centerCol: { flex: 1, alignItems: "center", justifyContent: "center" },
+    pulseRing: { position: "absolute", width: 140, height: 140, borderRadius: 70, borderWidth: 2, borderColor: c.primary },
+    avatar: { width: 130, height: 130, borderRadius: 65, backgroundColor: c.primaryDim, alignItems: "center", justifyContent: "center" },
+    avatarText: { color: c.text, fontSize: 42, fontWeight: "700" },
+    name: { color: c.text, fontSize: 24, fontWeight: "700", marginTop: 24 },
+    number: { color: c.textMuted, fontSize: 15, marginTop: 4 },
+    stateRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+    stateDot: { width: 8, height: 8, borderRadius: 4 },
+    state: { color: c.textMuted, fontSize: 14 },
+    viaCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: c.card, borderRadius: 12, padding: 12, marginTop: 20, borderWidth: 1, borderColor: c.border, width: "100%" },
+    viaLabel: { color: c.textMuted, fontSize: 11 },
+    viaName: { color: c.text, fontSize: 14, fontWeight: "700", marginTop: 2 },
+    viaDid: { color: c.primary, fontSize: 12, fontWeight: "600", maxWidth: 130 },
+    errorBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: c.redDim + "90", borderWidth: 1, borderColor: c.red + "60", borderRadius: 12, padding: 12, marginTop: 12, width: "100%" },
+    errorText: { flex: 1, color: c.red, fontSize: 12, fontWeight: "600" },
+    mohNote: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: c.primaryDim + "80",
+      borderWidth: 1,
+      borderColor: c.primary + "50",
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginTop: 10,
+      width: "100%",
+    },
+    mohNoteText: { flex: 1, color: c.primary, fontSize: 12, fontWeight: "600" },
+    dtmfBox: { marginTop: 20, width: "100%", padding: 12, backgroundColor: c.card, borderRadius: 12, borderWidth: 1, borderColor: c.border },
+    dtmfDigits: { color: c.text, fontSize: 22, textAlign: "center", letterSpacing: 4, minHeight: 30 },
+    dtmfGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 8 },
+    dtmfKey: { width: "30%", aspectRatio: 2.2, alignItems: "center", justifyContent: "center", backgroundColor: c.bgAlt, borderRadius: 10, marginBottom: 8 },
+    dtmfText: { color: c.text, fontSize: 22, fontWeight: "600" },
+    actionsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", paddingHorizontal: 8 },
+    actionItem: { width: "31%", alignItems: "center", marginBottom: 18, gap: 6 },
+    actionBtn: { width: 62, height: 62, borderRadius: 31, backgroundColor: c.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border },
+    actionBtnActive: { backgroundColor: c.text, borderColor: c.text },
+    actionLabel: { color: c.text, fontSize: 12 },
+    hangup: { alignSelf: "center", width: 72, height: 72, borderRadius: 36, backgroundColor: c.red, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+    tBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: c.overlay },
+    tSheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: c.bgElev, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30, borderWidth: 1, borderColor: c.border },
+    tHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: "center", marginBottom: 12 },
+    tTitle: { color: c.text, fontSize: 18, fontWeight: "700", marginBottom: 4 },
+    tHelp: { color: c.textMuted, fontSize: 12, marginBottom: 14 },
+    tInput: { backgroundColor: c.bgAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, color: c.text, fontSize: 15, borderWidth: 1, borderColor: c.border },
+    tInfo: { color: c.yellow, fontSize: 12, marginTop: 10 },
+    tCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.card, alignItems: "center", borderWidth: 1, borderColor: c.border },
+    tGo: { flex: 1.2, paddingVertical: 12, borderRadius: 10, backgroundColor: c.primary, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6 },
+  });

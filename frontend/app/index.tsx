@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/AuthContext";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/theme";
 
 export default function Index() {
+  const c = useTheme();
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -15,8 +16,8 @@ export default function Index() {
   }, [loading, user]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
-      <ActivityIndicator color={colors.primary} size="large" />
+    <View style={{ flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }}>
+      <ActivityIndicator color={c.primary} size="large" />
     </View>
   );
 }

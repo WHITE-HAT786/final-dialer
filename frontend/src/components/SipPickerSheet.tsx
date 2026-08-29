@@ -4,17 +4,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMultiSip } from "@/src/sip/MultiSipContext";
-import { colors } from "@/src/theme";
+import { useTheme, useThemedStyles, type Palette } from "@/src/theme";
 
-const STATUS_UI = (status: string) => {
+const STATUS_UI = (status: string, c: Palette) => {
   switch (status) {
-    case "registered": return { label: "Registered", color: colors.green };
-    case "connecting": return { label: "Connecting…", color: colors.yellow };
-    case "registration_failed": return { label: "Reg. Failed", color: colors.red };
-    case "unsupported": return { label: "Unsupported", color: colors.yellow };
-    case "error": return { label: "Error", color: colors.red };
-    case "unregistered": return { label: "Unregistered", color: colors.textMuted };
-    default: return { label: "Disconnected", color: colors.textMuted };
+    case "registered": return { label: "Registered", color: c.success };
+    case "connecting": return { label: "Connecting…", color: c.warn };
+    case "registration_failed": return { label: "Reg. Failed", color: c.danger };
+    case "unsupported": return { label: "Unsupported", color: c.warn };
+    case "error": return { label: "Error", color: c.danger };
+    case "unregistered": return { label: "Unregistered", color: c.muted };
+    default: return { label: "Disconnected", color: c.muted };
   }
 };
 
@@ -27,6 +27,8 @@ export default function SipPickerSheet({
   onClose: () => void;
   title?: string;
 }) {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { runtimes, selectedId, setSelected } = useMultiSip();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -44,7 +46,7 @@ export default function SipPickerSheet({
         <View style={styles.header}>
           <Text style={styles.title}>{title}</Text>
           <TouchableOpacity onPress={onClose} testID="sip-picker-close">
-            <Ionicons name="close" size={22} color={colors.textMuted} />
+            <Ionicons name="close" size={22} color={c.textMuted} />
           </TouchableOpacity>
         </View>
         <Text style={styles.help}>Outgoing calls will use the selected account.</Text>
@@ -52,7 +54,7 @@ export default function SipPickerSheet({
         <ScrollView style={{ maxHeight: 420 }}>
           {runtimes.length === 0 && (
             <View style={styles.empty} testID="sip-picker-empty">
-              <MaterialCommunityIcons name="server-network-off" size={40} color={colors.textDim} />
+              <MaterialCommunityIcons name="server-network-off" size={40} color={c.textDim} />
               <Text style={styles.emptyTitle}>No SIP accounts</Text>
               <Text style={styles.emptySub}>Add one to place real calls.</Text>
               <TouchableOpacity
@@ -66,7 +68,7 @@ export default function SipPickerSheet({
             </View>
           )}
           {runtimes.map((r) => {
-            const s = STATUS_UI(r.status);
+            const s = STATUS_UI(r.status, c);
             const isActive = r.account.id === selectedId;
             return (
               <TouchableOpacity
@@ -75,8 +77,8 @@ export default function SipPickerSheet({
                 onPress={() => pick(r.account.id)}
                 testID={`sip-picker-item-${r.account.id}`}
               >
-                <View style={[styles.iconWrap, { backgroundColor: (r.account.color || colors.primary) + "22" }]}>
-                  <MaterialCommunityIcons name="server-network" size={22} color={r.account.color || colors.primary} />
+                <View style={[styles.iconWrap, { backgroundColor: (r.account.color || c.primary) + "22" }]}>
+                  <MaterialCommunityIcons name="server-network" size={22} color={r.account.color || c.primary} />
                   <View style={[styles.dot, { backgroundColor: s.color }]} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -92,7 +94,7 @@ export default function SipPickerSheet({
                     <Ionicons name="checkmark" size={16} color="#fff" />
                   </View>
                 ) : (
-                  <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                  <Ionicons name="chevron-forward" size={20} color={c.textMuted} />
                 )}
               </TouchableOpacity>
             );
@@ -103,7 +105,7 @@ export default function SipPickerSheet({
               onPress={() => { onClose(); router.push("/sip-accounts"); }}
               testID="sip-picker-manage"
             >
-              <Ionicons name="settings-outline" size={16} color={colors.primary} />
+              <Ionicons name="settings-outline" size={16} color={c.primary} />
               <Text style={styles.manageBtnText}>Manage Accounts</Text>
             </TouchableOpacity>
           )}
@@ -113,27 +115,28 @@ export default function SipPickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
-  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: "#0C1526", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, borderWidth: 1, borderColor: colors.border },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 12 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  help: { color: colors.textMuted, fontSize: 12, marginTop: 4, marginBottom: 12 },
-  empty: { alignItems: "center", padding: 30 },
-  emptyTitle: { color: "#fff", fontWeight: "700", fontSize: 15, marginTop: 10 },
-  emptySub: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
-  addBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.primary },
-  addBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 8, backgroundColor: colors.card },
-  rowActive: { borderColor: colors.primary },
-  iconWrap: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", position: "relative" },
-  dot: { position: "absolute", right: -2, bottom: -2, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.card },
-  name: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  meta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  did: { color: colors.primary, fontSize: 12, marginTop: 2 },
-  status: { fontSize: 11, fontWeight: "700", marginTop: 4 },
-  checkBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  manageBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: colors.primary + "40" },
-  manageBtnText: { color: colors.primary, fontWeight: "700", fontSize: 13 },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: c.overlay },
+    sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: c.bgElev, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, borderWidth: 1, borderColor: c.border },
+    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: "center", marginBottom: 12 },
+    header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    title: { color: c.text, fontSize: 18, fontWeight: "700" },
+    help: { color: c.textMuted, fontSize: 12, marginTop: 4, marginBottom: 12 },
+    empty: { alignItems: "center", padding: 30 },
+    emptyTitle: { color: c.text, fontWeight: "700", fontSize: 15, marginTop: 10 },
+    emptySub: { color: c.textMuted, fontSize: 12, marginTop: 4 },
+    addBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: c.primary },
+    addBtnText: { color: c.text, fontWeight: "700", fontSize: 13 },
+    row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, marginBottom: 8, backgroundColor: c.card },
+    rowActive: { borderColor: c.primary },
+    iconWrap: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", position: "relative" },
+    dot: { position: "absolute", right: -2, bottom: -2, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: c.card },
+    name: { color: c.text, fontWeight: "700", fontSize: 15 },
+    meta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    did: { color: c.primary, fontSize: 12, marginTop: 2 },
+    status: { fontSize: 11, fontWeight: "700", marginTop: 4 },
+    checkBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" },
+    manageBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: c.primary + "40" },
+    manageBtnText: { color: c.primary, fontWeight: "700", fontSize: 13 },
+  });

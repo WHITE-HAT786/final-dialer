@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors } from "@/src/theme";
+import { useTheme, useThemedStyles, type Palette } from "@/src/theme";
 
 type Stat = {
   label: string;
@@ -15,6 +15,8 @@ type Stat = {
 };
 
 export default function StatsRow({ stats, horizontal = true }: { stats: Stat[]; horizontal?: boolean }) {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const Wrap = horizontal ? ScrollView : View;
   const wrapProps: any = horizontal
     ? { horizontal: true, showsHorizontalScrollIndicator: false, contentContainerStyle: { gap: 10, paddingRight: 8 } }
@@ -37,7 +39,7 @@ export default function StatsRow({ stats, horizontal = true }: { stats: Stat[]; 
           <Text style={styles.label}>{s.label}</Text>
           <Text style={styles.value}>{s.value}</Text>
           {s.sub && (
-            <Text style={[styles.sub, s.change ? { color: s.positive ? colors.green : colors.red } : undefined]}>
+            <Text style={[styles.sub, s.change ? { color: s.positive ? c.green : c.red } : undefined]}>
               {s.change ? `${s.positive ? "↑" : "↓"} ${s.change} ` : ""}
               {s.sub}
             </Text>
@@ -48,23 +50,24 @@ export default function StatsRow({ stats, horizontal = true }: { stats: Stat[]; 
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    padding: 12,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 140,
-  },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
-  value: { color: "#fff", fontSize: 22, fontWeight: "700", marginTop: 2 },
-  sub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    card: {
+      padding: 12,
+      backgroundColor: c.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: c.border,
+      minWidth: 140,
+    },
+    icon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    label: { color: c.textMuted, fontSize: 12, marginTop: 6 },
+    value: { color: c.text, fontSize: 22, fontWeight: "700", marginTop: 2 },
+    sub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+  });

@@ -46,3 +46,8 @@ app-example
 package-lock.json
 # Android/iOS signing material
 *.keystore
+
+# Gradle output from local module builds
+modules/*/android/build/
+modules/*/android/.cxx/
+android/local.properties
