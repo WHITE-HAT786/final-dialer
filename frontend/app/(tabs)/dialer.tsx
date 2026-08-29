@@ -116,10 +116,18 @@ export default function Dialer() {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    // Compose full E.164-ish target with country code stripping leading zeros / duplicate prefix
-    const cc = country.code.replace(/[^+\d]/g, "");
-    const digits = num.replace(/[^\d*#]/g, "").replace(/^0+/, "");
-    const fullNumber = digits.startsWith(cc.replace("+", "")) ? `+${digits}` : `${cc}${digits}`;
+    // Compose the dial target. Feature codes (contain * or #, e.g. *97 echo test)
+    // and already-E.164 numbers (leading +) are sent AS-IS — never prefixed with a
+    // country code. Plain national numbers get the selected country code.
+    const raw = num.replace(/[^\d*#+]/g, "");
+    let fullNumber: string;
+    if (/[*#]/.test(raw) || raw.startsWith("+")) {
+      fullNumber = raw;
+    } else {
+      const cc = country.code.replace(/[^+\d]/g, "");
+      const digits = raw.replace(/^0+/, "");
+      fullNumber = digits.startsWith(cc.replace("+", "")) ? `+${digits}` : `${cc}${digits}`;
+    }
     const res = await call(fullNumber, selectedAccount.id);
     if (res.error) {
       setError(res.error);

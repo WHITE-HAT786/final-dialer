@@ -160,6 +160,28 @@ class ExpoPjsipModule : Module() {
       // Route audio to speaker/earpiece via AudioManager (handled in SipAudio).
       SipAudio.setSpeaker(appContext.reactContext, enabled)
     }
+    // Real SIP hold/resume via re-INVITE (pjsua2 setHold / reinvite UNHOLD).
+    AsyncFunction("setHold") { callId: String, hold: Boolean ->
+      ensurePjThread()
+      calls[callId]?.let {
+        val prm = CallOpParam(true)
+        if (hold) {
+          it.setHold(prm)
+        } else {
+          prm.opt.flag = pjsua_call_flag.PJSUA_CALL_UNHOLD.toLong()
+          it.reinvite(prm)
+        }
+      }
+    }
+    // Blind transfer via SIP REFER.
+    AsyncFunction("transfer") { callId: String, dest: String ->
+      ensurePjThread()
+      val acc = account ?: return@AsyncFunction false
+      val server = acc.info.uri.substringAfter("@").substringBefore(";")
+      val uri = if (dest.startsWith("sip:")) dest else "sip:$dest@$server"
+      calls[callId]?.xfer(uri, CallOpParam(true))
+      true
+    }
     Function("getRegistrationState") {
       account?.currentRegState ?: "offline"
     }

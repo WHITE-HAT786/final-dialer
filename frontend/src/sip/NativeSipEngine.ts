@@ -267,14 +267,13 @@ export class NativeSipEngine {
 
   sendDTMF(id: string, tone: string) { getPjsip()?.sendDtmf(id, tone).catch((e) => this.log("error", "dtmf failed", e)); }
 
-  // ---- features not in the native PJSIP module scope yet (honest no-ops) ----
-  // These existed on the WebRTC engine; the native module exposes register/call/
-  // answer/hangup/dtmf/mute/speaker only. They report "unsupported" rather than
-  // pretending to work — to be added to the native module when needed.
+  // Real SIP hold/resume via the native PJSIP re-INVITE (setHold / reinvite UNHOLD).
   setHold(id: string, hold: boolean) {
+    const p = getPjsip();
+    if (!p) return;
+    p.setHold(id, hold).catch((e) => this.log("error", "hold failed", e));
     const c = this.calls.get(id);
-    if (c) { c.onHold = hold; this.calls.set(id, c); this.notify(); }
-    this.log("warn", "hold not implemented on the native engine yet", { id, hold });
+    if (c) { c.onHold = hold; c.state = hold ? "held" : "connected"; this.calls.set(id, c); this.notify(); }
   }
   async setHoldWithLocalMoh(
     _id: string, _fileUri: string, _opts?: { loop?: boolean; volume?: number },
@@ -283,8 +282,11 @@ export class NativeSipEngine {
   }
   async resumeFromLocalMoh(_id: string): Promise<void> { /* no local MOH on the native path */ }
   isLocalMohActive(_id: string): boolean { return false; }
-  transfer(_id: string, _target: string): boolean {
-    this.log("warn", "transfer not implemented on the native engine yet");
-    return false;
+  // Blind transfer via SIP REFER (native PJSIP call.xfer).
+  transfer(id: string, target: string): boolean {
+    const p = getPjsip();
+    if (!p) return false;
+    p.transfer(id, target).catch((e) => this.log("error", "transfer failed", e));
+    return true;
   }
 }

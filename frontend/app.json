@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.depthroute.dialer",
-      "versionCode": 20260838
+      "versionCode": 20260840
     },
     "web": {
       "bundler": "metro",

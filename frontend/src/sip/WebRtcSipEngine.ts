@@ -20,22 +20,32 @@ import { canPlaceCall, isNativeUp } from "./sipLifecycle";
 
 type Listener = () => void;
 
-// --- Optional native/lib wiring (guarded so import never crashes JS-only envs) ---
+// --- Optional native/lib wiring (LAZY: initialized only when a WSS account is
+// actually used). This must NOT run at module import time — react-native-webrtc's
+// registerGlobals() performs native WebRTC/audio init that interferes with the
+// native PJSIP/UDP registration if it runs on every app startup. MultiSipContext
+// imports this module for its type, so keep import side-effect free. ---
 let JsSIP: any = null;
 let webrtcLinked = false;
-try {
-  // react-native-webrtc must register its globals (RTCPeerConnection, mediaDevices…)
-  // BEFORE JsSIP is used, so JsSIP's WebRTC calls resolve to the native impl.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const rnwebrtc = require("react-native-webrtc");
-  if (rnwebrtc?.registerGlobals) { rnwebrtc.registerGlobals(); webrtcLinked = true; }
-} catch { webrtcLinked = false; }
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  JsSIP = require("jssip");
-} catch { JsSIP = null; }
+let libsInited = false;
+function ensureWebrtcLibs(): void {
+  if (libsInited) return;
+  libsInited = true;
+  try {
+    // react-native-webrtc must register its globals (RTCPeerConnection, mediaDevices…)
+    // BEFORE JsSIP is used, so JsSIP's WebRTC calls resolve to the native impl.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rnwebrtc = require("react-native-webrtc");
+    if (rnwebrtc?.registerGlobals) { rnwebrtc.registerGlobals(); webrtcLinked = true; }
+  } catch { webrtcLinked = false; }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    JsSIP = require("jssip");
+  } catch { JsSIP = null; }
+}
 
 function isWebrtcAvailable(): boolean {
+  ensureWebrtcLibs();
   return webrtcLinked && JsSIP != null && typeof (globalThis as any).RTCPeerConnection === "function";
 }
 

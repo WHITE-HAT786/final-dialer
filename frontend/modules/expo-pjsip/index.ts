@@ -22,6 +22,10 @@ export declare class ExpoPjsipNative extends NativeModule<PjsipEvents> {
   sendDtmf(callId: string, digit: string): Promise<void>;
   setMute(callId: string, muted: boolean): Promise<void>;
   setSpeaker(enabled: boolean): Promise<void>;
+  /** Real SIP hold/resume via re-INVITE. */
+  setHold(callId: string, hold: boolean): Promise<void>;
+  /** Blind transfer via SIP REFER. */
+  transfer(callId: string, dest: string): Promise<boolean>;
   getRegistrationState(): PjsipRegState;
   /** Tear down the account, transport and endpoint. */
   destroy(): Promise<void>;
