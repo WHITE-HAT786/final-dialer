@@ -42,6 +42,15 @@ const STATUS_UI = (s: string) => {
 
 type FormState = ({ id?: string } & Omit<SipAccount, "id" | "color">) | null;
 
+// Provider presets: PUBLIC, non-secret configuration ONLY (server/port/transport).
+// The customer always supplies their own SIP username + password. "Custom" leaves
+// every field editable. Add new providers here as config data — never credentials.
+type Provider = { key: string; name: string; website?: string; host?: string; port?: number; transport?: "UDP" | "TCP" | "TLS" | "WSS"; wssUrl?: string };
+const PROVIDERS: Provider[] = [
+  { key: "anycall", name: "Any Call Agency", website: "anycallagency.org" },
+  { key: "custom", name: "Custom Provider" },
+];
+
 export default function SipAccountsScreen() {
   const {
     runtimes, bootstrap, bootstrapError, retryBootstrap,
@@ -66,19 +75,21 @@ export default function SipAccountsScreen() {
 
   const startAdd = () => setForm({
     displayName: "", username: "", authUser: "", password: "", domain: "", host: "",
-    port: 5060, transport: "UDP", wssUrl: "", callerId: "", enabled: true,
+    port: 5060, transport: "UDP", wssUrl: "", outboundProxy: null, callerId: "", enabled: true,
   });
   const startEdit = (a: SipAccount) => setForm({
     id: a.id, displayName: a.displayName, username: a.username, authUser: a.authUser || "",
     password: a.password, domain: a.domain, host: a.host || a.domain || "", port: a.port || 5060,
-    transport: (a.transport as any) || "UDP", wssUrl: a.wssUrl || "", callerId: a.callerId || "", enabled: a.enabled,
+    transport: (a.transport as any) || "UDP", wssUrl: a.wssUrl || "", outboundProxy: a.outboundProxy ?? null,
+    callerId: a.callerId || "", enabled: a.enabled,
   });
   const doSave = async () => {
     if (!form) return;
     const patch = {
       displayName: form.displayName, username: form.username, authUser: form.authUser,
       password: form.password, domain: form.domain, host: form.host, port: Number(form.port) || 5060,
-      transport: form.transport, wssUrl: form.wssUrl, callerId: form.callerId, enabled: form.enabled,
+      transport: form.transport, wssUrl: form.wssUrl, outboundProxy: form.outboundProxy ?? null,
+      callerId: form.callerId, enabled: form.enabled,
     };
     if (form.id) await updateAccount(form.id, patch);
     else await addAccount(patch);
@@ -106,7 +117,7 @@ export default function SipAccountsScreen() {
       {mode === "WebRTC" && (
         <View style={styles.warn}>
           <Ionicons name="warning" size={14} color={colors.yellow} />
-          <Text style={styles.warnText}>WebRTC calling isn&apos;t available in this build — the app registers over native SIP/UDP. (Backend WSS config exists at webrtc-config.php; a WebRTC media engine is a separate build.)</Text>
+          <Text style={styles.warnText}>Your managed Depth Route line registers over native SIP/UDP. WebRTC (SIP-over-WSS) is available for third-party accounts you add below — pick the WebRTC transport when adding one.</Text>
         </View>
       )}
 
@@ -193,7 +204,16 @@ function AccountForm({ form, onChange, onSave, onCancel }: { form: FormState; on
   const insets = useSafeAreaInsets();
   if (!form) return null;
   const setF = (p: Partial<NonNullable<FormState>>) => onChange({ ...form, ...p } as FormState);
-  const nativeTransports = ["UDP", "TCP", "TLS"] as const;
+  const transports = ["UDP", "TCP", "TLS", "WSS"] as const;
+  const applyPreset = (p: Provider) => {
+    // Prefill only known, non-secret configuration. Credentials stay user-entered.
+    const patch: Partial<NonNullable<FormState>> = { displayName: form.displayName || p.name };
+    if (p.host) { patch.host = p.host; patch.domain = p.host; }
+    if (p.port) patch.port = p.port;
+    if (p.transport) patch.transport = p.transport;
+    if (p.wssUrl) patch.wssUrl = p.wssUrl;
+    setF(patch);
+  };
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={styles.mBackdrop} onPress={onCancel} />
@@ -201,6 +221,15 @@ function AccountForm({ form, onChange, onSave, onCancel }: { form: FormState; on
         <View style={styles.mHandle} />
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.mHead}><Text style={styles.mTitle}>{form.id ? "Edit SIP Account" : "Add SIP Account"}</Text><TouchableOpacity onPress={onCancel}><Ionicons name="close" size={22} color={colors.textMuted} /></TouchableOpacity></View>
+          <Text style={styles.fLabel}>Provider</Text>
+          <View style={styles.tRow}>
+            {PROVIDERS.map((p) => (
+              <TouchableOpacity key={p.key} style={[styles.tChip, { flex: 0, paddingHorizontal: 12 }]} onPress={() => applyPreset(p)} testID={`f-provider-${p.key}`}>
+                <Text style={styles.tText}>{p.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.tNote}>Presets prefill server settings only — enter your own username &amp; password.</Text>
           <Field label="Account Name"><TextInput style={styles.input} value={form.displayName} onChangeText={(t) => setF({ displayName: t })} placeholder="e.g. Office" placeholderTextColor={colors.textDim} testID="f-name" /></Field>
           <Field label="SIP Username"><TextInput style={styles.input} value={form.username} onChangeText={(t) => setF({ username: t })} autoCapitalize="none" placeholder="2001" placeholderTextColor={colors.textDim} testID="f-username" /></Field>
           <Field label="Auth Username (optional)"><TextInput style={styles.input} value={form.authUser} onChangeText={(t) => setF({ authUser: t })} autoCapitalize="none" placeholder="Defaults to SIP username" placeholderTextColor={colors.textDim} testID="f-auth" /></Field>
@@ -210,14 +239,17 @@ function AccountForm({ form, onChange, onSave, onCancel }: { form: FormState; on
             <View style={{ width: 110 }}><Text style={styles.fLabel}>Port</Text><TextInput style={styles.input} value={String(form.port || "")} onChangeText={(t) => setF({ port: Number(t.replace(/[^0-9]/g, "")) || 5060 })} keyboardType="numeric" placeholder="5060" placeholderTextColor={colors.textDim} testID="f-port" /></View>
             <View style={{ flex: 1 }}><Text style={styles.fLabel}>Transport</Text>
               <View style={styles.tRow}>
-                {nativeTransports.map((t) => (
-                  <TouchableOpacity key={t} style={[styles.tChip, form.transport === t && styles.tChipActive]} onPress={() => setF({ transport: t })} testID={`f-transport-${t}`}><Text style={[styles.tText, form.transport === t && { color: "#fff" }]}>{t}</Text></TouchableOpacity>
+                {transports.map((t) => (
+                  <TouchableOpacity key={t} style={[styles.tChip, form.transport === t && styles.tChipActive]} onPress={() => setF({ transport: t })} testID={`f-transport-${t}`}><Text style={[styles.tText, form.transport === t && { color: "#fff" }]}>{t === "WSS" ? "WebRTC" : t}</Text></TouchableOpacity>
                 ))}
-                <View style={[styles.tChip, styles.tChipDisabled]}><Text style={styles.tTextDisabled}>WebRTC*</Text></View>
               </View>
-              <Text style={styles.tNote}>*WebRTC/WSS isn&apos;t available in this native build.</Text>
+              <Text style={styles.tNote}>UDP/TCP/TLS use native PJSIP; WebRTC uses SIP-over-WSS.</Text>
             </View>
           </View>
+          {form.transport === "WSS" && (
+            <Field label="WebRTC WSS URL"><TextInput style={styles.input} value={form.wssUrl || ""} onChangeText={(t) => setF({ wssUrl: t })} autoCapitalize="none" placeholder="wss://host:8089/ws" placeholderTextColor={colors.textDim} testID="f-wss" /></Field>
+          )}
+          <Field label="Outbound Proxy (optional)"><TextInput style={styles.input} value={form.outboundProxy || ""} onChangeText={(t) => setF({ outboundProxy: t || null })} autoCapitalize="none" placeholder="sip:proxy.example.com:5060" placeholderTextColor={colors.textDim} testID="f-proxy" /></Field>
           <View style={styles.switchRow}><View style={{ flex: 1 }}><Text style={styles.swTitle}>Auto-register</Text><Text style={styles.swSub}>Connect automatically when the app loads.</Text></View><Switch value={form.enabled} onValueChange={(v) => setF({ enabled: v })} testID="f-enabled" /></View>
           <TouchableOpacity style={styles.saveBtn} onPress={onSave} testID="f-save"><Ionicons name="save" size={16} color="#fff" /><Text style={styles.saveText}>{form.id ? "Save Changes" : "Add & Register"}</Text></TouchableOpacity>
         </ScrollView>

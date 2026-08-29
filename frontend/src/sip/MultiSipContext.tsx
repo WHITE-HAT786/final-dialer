@@ -4,7 +4,25 @@
 // outgoing calls. The WebRTC/JsSIP engine is no longer on the calling path.
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { storage } from "@/src/utils/storage";
+import { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipTypes";
+import { NativeSipEngine } from "./NativeSipEngine";
+import { WebRtcSipEngine } from "./WebRtcSipEngine";
+import { isPjsipAvailable } from "@/modules/expo-pjsip";
+import { loadSipAccountFromBackend } from "./loadSipConfig";
+import {
+  SipBootstrapState,
+  SipConfigAccount,
+  classifyBootstrapError,
+  isRegistrableConfig,
+  mapEngineStatus,
+} from "./sipBootstrap";
+
+// Both engines expose the same surface; a WSS account uses the WebRTC engine,
+// everything else the native PJSIP/UDP engine. They are independent (separate
+// AORs) so UDP and WebRTC can coexist.
+export type AnySipEngine = NativeSipEngine | WebRtcSipEngine;
 
 // RECORD_AUDIO is required both to capture mic audio for RTP AND to start the
 // `microphone` foreground service (Android 14+ throws SecurityException without
@@ -17,17 +35,6 @@ async function ensureMicPermission(): Promise<void> {
     if (!granted) await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
   } catch { /* best effort */ }
 }
-import { SipConfig, SipStatus, CallInfo, SipLogEntry } from "./SipTypes";
-import { NativeSipEngine } from "./NativeSipEngine";
-import { isPjsipAvailable } from "@/modules/expo-pjsip";
-import { loadSipAccountFromBackend } from "./loadSipConfig";
-import {
-  SipBootstrapState,
-  SipConfigAccount,
-  classifyBootstrapError,
-  isRegistrableConfig,
-  mapEngineStatus,
-} from "./sipBootstrap";
 
 export type SipAccount = {
   id: string;
@@ -50,7 +57,7 @@ export type SipAccount = {
 
 export type AccountRuntime = {
   account: SipAccount;
-  engine: NativeSipEngine;
+  engine: AnySipEngine;
   status: SipStatus;
   lastError?: string;
   calls: CallInfo[];
@@ -87,14 +94,15 @@ function accountId() {
 
 function toConfig(a: SipAccount): SipConfig {
   const host = a.host || a.domain;
-  const transport = (a.transport as "UDP" | "TCP" | "TLS") || "UDP";
+  const isWss = a.transport === "WSS";
+  const transport = (isWss ? "UDP" : (a.transport as "UDP" | "TCP" | "TLS")) || "UDP";
   return {
     displayName: a.displayName || a.username,
     username: a.username,
     authUsername: a.authUser || a.username,
     password: a.password,
     domain: a.domain,
-    wssUrl: "",                    // native UDP path — no WebRTC
+    wssUrl: isWss ? (a.wssUrl || "") : "",   // WebRTC engine registers over this WSS URL
     server: host,
     port: a.port || 5060,
     transport,
@@ -105,6 +113,7 @@ function toConfig(a: SipAccount): SipConfig {
 
 // A native UDP account is registrable once it has host + username + password.
 function canRegister(a: SipAccount): boolean {
+  if (a.transport === "WSS") return !!(a.username && a.password && a.wssUrl);
   return !!(a.username && a.password && (a.host || a.domain));
 }
 
@@ -147,7 +156,7 @@ const MultiSipContext = createContext<Ctx | null>(null);
 export function MultiSipProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<SipAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [engines] = useState<Map<string, NativeSipEngine>>(() => new Map());
+  const [engines] = useState<Map<string, AnySipEngine>>(() => new Map());
   const [tick, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
   // Bootstrap state for the customer's OWN backend line (the primary account).
@@ -155,10 +164,11 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
   const [bootstrapError, setBootstrapError] = useState<string | undefined>(undefined);
 
   // Ensure an engine exists for a given account
-  const ensureEngine = useCallback((a: SipAccount) => {
+  const ensureEngine = useCallback((a: SipAccount): AnySipEngine => {
     let e = engines.get(a.id);
     if (!e) {
-      e = new NativeSipEngine();
+      // WSS transport → real WebRTC/JsSIP engine; everything else → native PJSIP/UDP.
+      e = a.transport === "WSS" ? new WebRtcSipEngine() : new NativeSipEngine();
       e.subscribe(forceUpdate);
       engines.set(a.id, e);
     }
@@ -327,6 +337,20 @@ export function MultiSipProvider({ children }: { children: ReactNode }) {
       engines.forEach((eng) => { void eng.reconcile(); });
     });
     return () => sub.remove();
+  }, [engines]);
+
+  // Recover registrations on NETWORK recovery (the emulator/real networks drop
+  // WiFi mid-session). Only act on an offline->online transition so we don't
+  // reconcile on every network event; reconcile() re-checks the real native
+  // state and re-registers only if needed (no duplicate REGISTER loops).
+  useEffect(() => {
+    let wasOffline = false;
+    const unsub = NetInfo.addEventListener((state) => {
+      const online = !!state.isConnected && state.isInternetReachable !== false;
+      if (online && wasOffline) engines.forEach((eng) => { void eng.reconcile(); });
+      wasOffline = !online;
+    });
+    return () => unsub();
   }, [engines]);
 
   const call: Ctx["call"] = useCallback(async (target, accId) => {

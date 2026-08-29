@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.depthroute.dialer",
-      "versionCode": 20260836
+      "versionCode": 20260838
     },
     "web": {
       "bundler": "metro",
@@ -40,7 +40,8 @@
       ],
       "expo-audio",
       "expo-asset",
-      "./modules/expo-pjsip/app.plugin.js"
+      "./modules/expo-pjsip/app.plugin.js",
+      "@config-plugins/react-native-webrtc"
     ],
     "experiments": {
       "typedRoutes": true
